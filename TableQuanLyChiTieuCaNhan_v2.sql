@@ -1,10 +1,13 @@
 -- ====================================================================
 -- 0. KHỞI TẠO DATABASE AN TOÀN
 -- ====================================================================
-USE master;
-GO
-
 DECLARE @ForceRecreate bit = 0;
+DECLARE @TargetDatabase sysname = N'QuanLyChiTieuCaNhan';
+
+IF DB_NAME() <> @TargetDatabase
+BEGIN
+    THROW 50000, N'Hay ket noi truc tiep vao database QuanLyChiTieuCaNhan truoc khi chay script nay. Azure SQL Database khong ho tro USE de chuyen database.', 1;
+END
 
 IF DB_ID('QuanLyChiTieuCaNhan') IS NOT NULL AND @ForceRecreate = 1
 BEGIN
@@ -18,11 +21,8 @@ GO
 -- ====================================================================
 -- 1. TẠO CƠ SỞ DỮ LIỆU (NẾU CHƯA CÓ)
 -- ====================================================================
-IF DB_ID('QuanLyChiTieuCaNhan') IS NULL
-    CREATE DATABASE QuanLyChiTieuCaNhan;
-GO
-
-USE QuanLyChiTieuCaNhan;
+-- Da ket noi truc tiep vao database QuanLyChiTieuCaNhan o buoc tren.
+-- Azure SQL Database khong ho tro CREATE DATABASE / USE de chuyen database trong cung script.
 GO
 
 -- ====================================================================
@@ -521,18 +521,21 @@ GO
 -- 7. TẠO STORED PROCEDURE KHỞI TẠO LOGIN VÀ USER
 -- ====================================================================
 
+-- Tạo role trước để phần GRANT không phụ thuộc vào procedure
+IF DATABASE_PRINCIPAL_ID('db_user') IS NULL
+    CREATE ROLE db_user;
+GO
+
+IF DATABASE_PRINCIPAL_ID('db_admin') IS NULL
+    CREATE ROLE db_admin;
+GO
+
 CREATE PROCEDURE sp_TaoLoginVaUser
 AS
 BEGIN
     DECLARE @Ten_TK NVARCHAR(100), @Mat_khau NVARCHAR(100), @Vai_tro NVARCHAR(50), @SQL NVARCHAR(MAX);
+    DECLARE @IsAzureSql BIT = CASE WHEN CAST(SERVERPROPERTY('EngineEdition') AS INT) = 5 THEN 1 ELSE 0 END;
     
-    -- Tạo role nếu chưa có
-    IF NOT EXISTS (SELECT * FROM sys.database_principals WHERE name = 'db_user')
-        CREATE ROLE db_user;
-    
-    IF NOT EXISTS (SELECT * FROM sys.database_principals WHERE name = 'db_admin')
-        CREATE ROLE db_admin;
-        
     DECLARE cur CURSOR FOR
     SELECT Ten_TK, Mat_khau, Vai_tro FROM NguoiDung;
     
@@ -541,25 +544,33 @@ BEGIN
     
     WHILE @@FETCH_STATUS = 0
     BEGIN
-        -- Tạo LOGIN nếu chưa có
-        IF NOT EXISTS (SELECT * FROM sys.server_principals WHERE name = @Ten_TK)
-        BEGIN
-            SET @SQL = 'CREATE LOGIN [' + @Ten_TK + '] WITH PASSWORD = N''' + @Mat_khau + ''';';
-            EXEC sp_executesql @SQL;
-        END
-        
-        -- Tạo USER nếu chưa có
-        IF NOT EXISTS (SELECT * FROM sys.database_principals WHERE name = @Ten_TK)
-        BEGIN
-            SET @SQL = 'CREATE USER [' + @Ten_TK + '] FOR LOGIN [' + @Ten_TK + '];';
-            EXEC sp_executesql @SQL;
-        END
-        
-        -- Gán role
-        IF @Vai_tro = 'admin'
-            EXEC sp_addrolemember 'db_admin', @Ten_TK;
-        ELSE
-            EXEC sp_addrolemember 'db_user', @Ten_TK;
+        BEGIN TRY
+            IF @IsAzureSql = 0
+            BEGIN
+                -- Tạo LOGIN nếu chưa có (chỉ hỗ trợ trên SQL Server thường / MI)
+                IF NOT EXISTS (SELECT * FROM sys.server_principals WHERE name = @Ten_TK)
+                BEGIN
+                    SET @SQL = 'CREATE LOGIN [' + @Ten_TK + '] WITH PASSWORD = N''' + @Mat_khau + ''';';
+                    EXEC sp_executesql @SQL;
+                END
+
+                -- Tạo USER nếu chưa có
+                IF NOT EXISTS (SELECT * FROM sys.database_principals WHERE name = @Ten_TK)
+                BEGIN
+                    SET @SQL = 'CREATE USER [' + @Ten_TK + '] FOR LOGIN [' + @Ten_TK + '];';
+                    EXEC sp_executesql @SQL;
+                END
+            END
+
+            -- Gán role
+            IF @Vai_tro = 'admin'
+                EXEC('ALTER ROLE db_admin ADD MEMBER [' + @Ten_TK + ']');
+            ELSE
+                EXEC('ALTER ROLE db_user ADD MEMBER [' + @Ten_TK + ']');
+        END TRY
+        BEGIN CATCH
+            PRINT N'Bo qua user ' + @Ten_TK + N': ' + ERROR_MESSAGE();
+        END CATCH;
             
         FETCH NEXT FROM cur INTO @Ten_TK, @Mat_khau, @Vai_tro;
     END
@@ -570,7 +581,10 @@ END;
 GO
 
 -- Khởi chạy Procedure để tạo tự động các Logins / Users
-EXEC sp_TaoLoginVaUser;
+IF CAST(SERVERPROPERTY('EngineEdition') AS INT) <> 5
+    EXEC sp_TaoLoginVaUser;
+ELSE
+    PRINT N'Skipping sp_TaoLoginVaUser on Azure SQL Database; roles were created for GRANT statements.';
 GO
 
 -- ====================================================================

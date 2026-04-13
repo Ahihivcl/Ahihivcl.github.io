@@ -63,10 +63,13 @@ Ban co the:
 
 ## Chay local (tuy chon)
 
-1. Mo SQL Server Management Studio (SSMS).
-2. Mo file `TableQuanLyChiTieuCaNhan_v2.sql`.
-3. Neu can reset DB, set `@ForceRecreate = 1`.
-4. Execute script.
+1. Mo SQL Server Management Studio (SSMS) hoac Azure Data Studio.
+2. Ket noi truc tiep vao database `QuanLyChiTieuCaNhan`.
+3. Mo file `TableQuanLyChiTieuCaNhan_v2.sql`.
+4. Neu can reset DB, set `@ForceRecreate = 1` va chi dung tren SQL Server on-prem/MI.
+5. Execute script.
+
+Luu y: tren Azure SQL Database, khong dung `USE master` hoac `CREATE DATABASE` trong cung file script. Hay tao database truoc, sau do ket noi thang vao database do truoc khi chay file.
 
 Kiem tra nhanh:
 
