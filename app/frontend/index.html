@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Demo App QLCTCN</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;700&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="shell">
+    <section id="loginCard" class="card login-card">
+      <h1>Dang nhap he thong</h1>
+      <p>Demo CSDL Quan Ly Chi Tieu Ca Nhan</p>
+      <form id="loginForm">
+        <label for="username">Ten tai khoan</label>
+        <input id="username" name="username" placeholder="vi du: lethanh" required>
+
+        <label for="password">Mat khau</label>
+        <input id="password" name="password" type="password" placeholder="vi du: thanh456" required>
+
+        <button type="submit">Dang nhap</button>
+      </form>
+      <p id="loginMessage" class="message"></p>
+    </section>
+
+    <section id="appPanel" class="card hidden">
+      <header class="topbar">
+        <div>
+          <h2 id="welcome">Xin chao</h2>
+          <p id="roleBadge" class="badge"></p>
+        </div>
+        <button id="logoutBtn" class="outline">Dang xuat</button>
+      </header>
+
+      <section class="metrics" id="metrics"></section>
+
+      <section class="grid">
+        <article class="box">
+          <h3>Giao dich</h3>
+          <form id="txForm" class="stack">
+            <input id="txName" placeholder="Ten giao dich" required>
+            <input id="txAmount" type="number" min="1" step="0.01" placeholder="So tien" required>
+            <input id="txDate" type="date" required>
+            <select id="txCategory" required></select>
+            <select id="txWallet" required></select>
+            <input id="txNote" placeholder="Ghi chu (khong bat buoc)">
+            <button type="submit">Them giao dich</button>
+          </form>
+          <p id="txMessage" class="message"></p>
+        </article>
+
+        <article class="box">
+          <h3>Danh sach giao dich gan day</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Ten</th>
+                  <th>So tien</th>
+                  <th>Ngay</th>
+                  <th>User</th>
+                </tr>
+              </thead>
+              <tbody id="txTable"></tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
+      <section id="adminSection" class="box hidden">
+        <h3>Admin CRUD User</h3>
+        <form id="userCreateForm" class="stack inline-grid">
+          <input id="newUsername" placeholder="Ten tai khoan" required>
+          <input id="newEmail" placeholder="Email" required>
+          <input id="newPassword" placeholder="Mat khau" required>
+          <select id="newRole" required>
+            <option value="user">user</option>
+            <option value="admin">admin</option>
+          </select>
+          <button type="submit">Tao user</button>
+        </form>
+        <p id="adminMessage" class="message"></p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Ten TK</th>
+                <th>Email</th>
+                <th>Vai tro</th>
+                <th>Hanh dong</th>
+              </tr>
+            </thead>
+            <tbody id="userTable"></tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

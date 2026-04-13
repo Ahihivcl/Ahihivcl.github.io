@@ -1,0 +1,190 @@
+:root {
+  --bg: #f3f6eb;
+  --ink: #1e2a24;
+  --soft: #617169;
+  --primary: #0f766e;
+  --primary-2: #0c5f58;
+  --danger: #b64635;
+  --card: #ffffff;
+  --line: #d5ddd6;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Be Vietnam Pro", sans-serif;
+  background: radial-gradient(circle at 0 0, #d9e9d8 0, transparent 35%), var(--bg);
+  color: var(--ink);
+}
+
+.shell {
+  width: min(1200px, 95vw);
+  margin: 28px auto;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 22px;
+  box-shadow: 0 12px 32px rgba(15, 45, 28, 0.08);
+}
+
+h1,
+h2,
+h3 {
+  font-family: "Space Grotesk", sans-serif;
+  margin: 0 0 8px;
+}
+
+.login-card {
+  width: min(440px, 100%);
+  margin: 40px auto;
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+label {
+  font-size: 0.92rem;
+}
+
+input,
+select,
+button {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font: inherit;
+}
+
+button {
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--primary-2);
+}
+
+.outline {
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+
+.hidden {
+  display: none;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.badge {
+  margin: 0;
+  color: var(--soft);
+}
+
+.metrics {
+  margin: 14px 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.metric {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+  background: #f8fbf7;
+}
+
+.metric .label {
+  color: var(--soft);
+  font-size: 0.86rem;
+}
+
+.metric .value {
+  margin-top: 4px;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1.3fr;
+  gap: 14px;
+}
+
+.box {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px;
+  margin-top: 12px;
+}
+
+.stack {
+  display: grid;
+  gap: 8px;
+}
+
+.inline-grid {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.table-wrap {
+  overflow: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  padding: 9px 6px;
+  font-size: 0.92rem;
+}
+
+.message {
+  min-height: 20px;
+  color: var(--danger);
+  font-size: 0.9rem;
+}
+
+.action-btn {
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: none;
+  color: #fff;
+  font-size: 0.82rem;
+}
+
+.btn-edit {
+  background: #0d9488;
+}
+
+.btn-delete {
+  background: #dc2626;
+}
+
+@media (max-width: 920px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
