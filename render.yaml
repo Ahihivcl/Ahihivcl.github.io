@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: qlctcn-demo-app
+    runtime: node
+    rootDir: app/backend
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: JWT_SECRET
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_SERVER
+        sync: false
+      - key: DB_PORT
+        value: 1433
+      - key: DB_NAME
+        value: QuanLyChiTieuCaNhan
+      - key: DB_ENCRYPT
+        value: true
+      - key: DB_TRUST_SERVER_CERT
+        value: false

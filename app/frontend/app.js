@@ -5,6 +5,8 @@ const state = {
   wallets: []
 };
 
+let apiBase = localStorage.getItem("apiBase") || "";
+
 const loginCard = document.getElementById("loginCard");
 const appPanel = document.getElementById("appPanel");
 const loginMessage = document.getElementById("loginMessage");
@@ -25,6 +27,11 @@ const adminSection = document.getElementById("adminSection");
 
 const txCategory = document.getElementById("txCategory");
 const txWallet = document.getElementById("txWallet");
+const apiBaseInput = document.getElementById("apiBase");
+
+if (apiBaseInput) {
+  apiBaseInput.value = apiBase;
+}
 
 function setMessage(target, text, isError = true) {
   target.textContent = text || "";
@@ -37,7 +44,10 @@ async function api(path, options = {}) {
     headers.Authorization = `Bearer ${state.token}`;
   }
 
-  const response = await fetch(path, { ...options, headers });
+  const normalizedBase = apiBase.trim().replace(/\/$/, "");
+  const url = normalizedBase ? `${normalizedBase}${path}` : path;
+
+  const response = await fetch(url, { ...options, headers });
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
@@ -135,6 +145,9 @@ loginForm.addEventListener("submit", async e => {
 
   const username = document.getElementById("username").value.trim();
   const password = document.getElementById("password").value;
+
+  apiBase = (apiBaseInput?.value || "").trim();
+  localStorage.setItem("apiBase", apiBase);
 
   try {
     const data = await api("/api/auth/login", {
