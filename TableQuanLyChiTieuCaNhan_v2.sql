@@ -343,7 +343,6 @@ INSERT INTO NganSach (Ten_ngan_sach, So_tien_gioi_han, ID_nguoi_dung, ID_danh_mu
 ('Tham nguoi om', 1700000, 'ND08', 'DM11'),
 ('Qua tang', 900000, 'ND01', 'DM05'),
 ('Du phong khan cap', 3200000, 'ND02', 'DM08'),
-('Chi phi hoc tieng Anh', 1400000, 'ND03', 'DM12'),
 ('Cham soc thu cung', 1200000, 'ND04', 'DM06'),
 ('Kinh doanh online', 5500000, 'ND05', 'DM13');
 GO

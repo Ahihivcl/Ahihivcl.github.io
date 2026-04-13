@@ -18,6 +18,23 @@ Ung dung da co san:
 
 ## Deploy online full app (khuyen nghi)
 
+## Buoc tiep theo ngay bay gio (Azure da co data)
+
+1. Day code len GitHub.
+2. Vao Render, tao service bang Blueprint tu repo nay.
+3. Trong Render, dien env theo mau trong `app/backend/.env.render.example`.
+4. Bam Deploy va doi build xong.
+5. Mo URL Render, dang nhap bang tai khoan admin mau de test.
+6. Neu frontend khong cung domain API, nhap API URL ngay man hinh login.
+
+Checklist test sau deploy:
+
+1. Dang nhap admin thanh cong.
+2. Tao user moi trong khu Admin CRUD.
+3. Dang nhap user moi vua tao.
+4. Them 1 giao dich va kiem tra hien trong danh sach.
+5. Kiem tra dong moi duoc ghi trong Azure SQL.
+
 ### A. Chuan bi SQL Server cloud
 
 Dung 1 trong 2 cach:
