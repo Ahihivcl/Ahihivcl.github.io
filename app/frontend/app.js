@@ -1,36 +1,49 @@
 const state = {
-  token: null,
-  user: null,
+  supabase: null,
+  session: null,
+  profile: null,
   categories: [],
-  wallets: []
+  wallets: [],
+  transactions: []
 };
 
-let apiBase = localStorage.getItem("apiBase") || "";
-
-const loginCard = document.getElementById("loginCard");
+const configCard = document.getElementById("configCard");
+const authCard = document.getElementById("authCard");
 const appPanel = document.getElementById("appPanel");
-const loginMessage = document.getElementById("loginMessage");
-const txMessage = document.getElementById("txMessage");
-const adminMessage = document.getElementById("adminMessage");
 
+const configForm = document.getElementById("configForm");
 const loginForm = document.getElementById("loginForm");
 const txForm = document.getElementById("txForm");
-const userCreateForm = document.getElementById("userCreateForm");
+const walletForm = document.getElementById("walletForm");
+const categoryForm = document.getElementById("categoryForm");
+
+const signupBtn = document.getElementById("signupBtn");
 const logoutBtn = document.getElementById("logoutBtn");
+const changeConfigBtn = document.getElementById("changeConfigBtn");
+
+const configMessage = document.getElementById("configMessage");
+const authMessage = document.getElementById("authMessage");
+const appMessage = document.getElementById("appMessage");
 
 const welcome = document.getElementById("welcome");
 const roleBadge = document.getElementById("roleBadge");
 const metrics = document.getElementById("metrics");
 const txTable = document.getElementById("txTable");
-const userTable = document.getElementById("userTable");
-const adminSection = document.getElementById("adminSection");
 
 const txCategory = document.getElementById("txCategory");
 const txWallet = document.getElementById("txWallet");
-const apiBaseInput = document.getElementById("apiBase");
 
-if (apiBaseInput) {
-  apiBaseInput.value = apiBase;
+const supabaseUrlInput = document.getElementById("supabaseUrl");
+const supabaseKeyInput = document.getElementById("supabaseKey");
+
+const savedUrl = localStorage.getItem("supabaseUrl") || "";
+const savedKey = localStorage.getItem("supabaseKey") || "";
+
+if (savedUrl) {
+  supabaseUrlInput.value = savedUrl;
+}
+if (savedKey) {
+  supabaseKeyInput.value = savedKey;
 }
 
 function setMessage(target, text, isError = true) {
@@ -38,226 +51,335 @@ function setMessage(target, text, isError = true) {
   target.style.color = isError ? "#b64635" : "#0b7a3d";
 }
 
-async function api(path, options = {}) {
-  const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
-  if (state.token) {
-    headers.Authorization = `Bearer ${state.token}`;
-  }
-
-  const normalizedBase = apiBase.trim().replace(/\/$/, "");
-  const url = normalizedBase ? `${normalizedBase}${path}` : path;
-
-  const response = await fetch(url, { ...options, headers });
-  const data = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    throw new Error(data.message || "Loi API");
-  }
-
-  return data;
+function setView(mode) {
+  configCard.classList.toggle("hidden", mode !== "config");
+  authCard.classList.toggle("hidden", mode !== "auth");
+  appPanel.classList.toggle("hidden", mode !== "app");
 }
 
-function renderMetrics(data) {
-  const entries = Object.entries(data.metrics || {});
-  metrics.innerHTML = entries
-    .map(([k, v]) => {
-      const label = k
-        .replace(/([A-Z])/g, " $1")
-        .replace(/^./, c => c.toUpperCase());
-      return `<div class="metric"><div class="label">${label}</div><div class="value">${Number(v).toLocaleString("vi-VN")}</div></div>`;
+function initClient(url, key) {
+  state.supabase = window.supabase.createClient(url, key);
+}
+
+async function getProfile(userId) {
+  const { data, error } = await state.supabase
+    .from("profiles")
+    .select("id, username, role")
+    .eq("id", userId)
+    .single();
+
+  if (error && error.code !== "PGRST116") {
+    throw error;
+  }
+
+  state.profile = data || { id: userId, username: "user", role: "user" };
+}
+
+function renderMetrics() {
+  const txs = state.transactions;
+  const income = txs
+    .filter(tx => {
+      const cat = state.categories.find(c => c.id === tx.category_id);
+      return cat && cat.kind === "income";
     })
-    .join("");
-}
+    .reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
 
-function renderTransactions(rows) {
-  txTable.innerHTML = rows
-    .map(r => `
-      <tr>
-        <td>${r.GiaoDich_ID}</td>
-        <td>${r.Ten_giao_dich}</td>
-        <td>${Number(r.So_tien).toLocaleString("vi-VN")}</td>
-        <td>${String(r.Ngay_giao_dich).slice(0, 10)}</td>
-        <td>${r.ID_nguoi_dung}</td>
-      </tr>
-    `)
-    .join("");
-}
+  const expense = txs
+    .filter(tx => {
+      const cat = state.categories.find(c => c.id === tx.category_id);
+      return cat && cat.kind !== "income";
+    })
+    .reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
 
-function renderUserRows(rows) {
-  userTable.innerHTML = rows
-    .map(
-      r => `
-      <tr>
-        <td>${r.NguoiDung_ID}</td>
-        <td>${r.Ten_TK}</td>
-        <td><input id="email-${r.NguoiDung_ID}" value="${r.Email || ""}"></td>
-        <td>
-          <select id="role-${r.NguoiDung_ID}">
-            <option value="user" ${r.Vai_tro === "user" ? "selected" : ""}>user</option>
-            <option value="admin" ${r.Vai_tro === "admin" ? "selected" : ""}>admin</option>
-          </select>
-        </td>
-        <td>
-          <button class="action-btn btn-edit" onclick="updateUser('${r.NguoiDung_ID}')">Sua</button>
-          <button class="action-btn btn-delete" onclick="deleteUser('${r.NguoiDung_ID}')">Xoa</button>
-        </td>
-      </tr>
-    `
-    )
+  const balance = income - expense;
+
+  const items = [
+    { label: "Tong giao dich", value: txs.length },
+    { label: "Tong thu", value: income.toLocaleString("vi-VN") },
+    { label: "Tong chi", value: expense.toLocaleString("vi-VN") },
+    { label: "So du tam tinh", value: balance.toLocaleString("vi-VN") }
+  ];
+
+  metrics.innerHTML = items
+    .map(item => `<div class="metric"><div class="label">${item.label}</div><div class="value">${item.value}</div></div>`)
     .join("");
 }
 
 function fillOptions() {
   txCategory.innerHTML = state.categories
-    .map(c => `<option value="${c.DanhMuc_ID}">${c.DanhMuc_ID} - ${c.Ten_danh_muc}</option>`)
+    .map(c => `<option value="${c.id}">${c.name} (${c.kind})</option>`)
     .join("");
 
   txWallet.innerHTML = state.wallets
-    .map(w => `<option value="${w.Vi_ID}">${w.Vi_ID} - ${w.Ten_vi} (${w.ID_nguoi_dung})</option>`)
+    .map(w => `<option value="${w.id}">${w.name} (${w.wallet_type})</option>`)
+    .join("");
+}
+
+function renderTransactions() {
+  const categoryMap = new Map(state.categories.map(c => [c.id, c.name]));
+  const walletMap = new Map(state.wallets.map(w => [w.id, w.name]));
+
+  txTable.innerHTML = state.transactions
+    .map(tx => `
+      <tr>
+        <td>${tx.id.slice(0, 8)}</td>
+        <td>${tx.title}</td>
+        <td>${Number(tx.amount).toLocaleString("vi-VN")}</td>
+        <td>${String(tx.transaction_date).slice(0, 10)}</td>
+        <td>${categoryMap.get(tx.category_id) || "-"}</td>
+        <td>${walletMap.get(tx.wallet_id) || "-"}</td>
+      </tr>
+    `)
     .join("");
 }
 
 async function refreshData() {
-  const [dash, meta, txs] = await Promise.all([
-    api("/api/dashboard"),
-    api("/api/meta"),
-    api("/api/transactions")
+  const uid = state.session.user.id;
+
+  const [walletRes, categoryRes, txRes] = await Promise.all([
+    state.supabase
+      .from("wallets")
+      .select("id,name,wallet_type")
+      .eq("owner_id", uid)
+      .order("created_at", { ascending: false }),
+    state.supabase
+      .from("categories")
+      .select("id,name,kind")
+      .eq("owner_id", uid)
+      .order("created_at", { ascending: false }),
+    state.supabase
+      .from("transactions")
+      .select("id,title,amount,transaction_date,category_id,wallet_id")
+      .eq("owner_id", uid)
+      .order("transaction_date", { ascending: false })
+      .limit(100)
   ]);
 
-  renderMetrics(dash);
-  state.categories = meta.categories || [];
-  state.wallets = meta.wallets || [];
-  fillOptions();
-  renderTransactions(txs);
-
-  if (state.user.role === "admin") {
-    adminSection.classList.remove("hidden");
-    const users = await api("/api/admin/users");
-    renderUserRows(users);
-  } else {
-    adminSection.classList.add("hidden");
+  if (walletRes.error) {
+    throw walletRes.error;
   }
+  if (categoryRes.error) {
+    throw categoryRes.error;
+  }
+  if (txRes.error) {
+    throw txRes.error;
+  }
+
+  state.wallets = walletRes.data || [];
+  state.categories = categoryRes.data || [];
+  state.transactions = txRes.data || [];
+
+  fillOptions();
+  renderTransactions();
+  renderMetrics();
 }
 
-loginForm.addEventListener("submit", async e => {
-  e.preventDefault();
-  setMessage(loginMessage, "");
+async function bootstrapSession() {
+  const { data } = await state.supabase.auth.getSession();
+  if (!data.session) {
+    setView("auth");
+    return;
+  }
 
-  const username = document.getElementById("username").value.trim();
+  state.session = data.session;
+  await getProfile(state.session.user.id);
+
+  welcome.textContent = `Xin chao, ${state.profile.username || state.session.user.email}`;
+  roleBadge.textContent = `Role: ${state.profile.role || "user"}`;
+
+  setView("app");
+  await refreshData();
+}
+
+configForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  setMessage(configMessage, "");
+
+  const url = supabaseUrlInput.value.trim();
+  const key = supabaseKeyInput.value.trim();
+
+  if (!url || !key) {
+    setMessage(configMessage, "Can nhap du URL va key", true);
+    return;
+  }
+
+  localStorage.setItem("supabaseUrl", url);
+  localStorage.setItem("supabaseKey", key);
+
+  try {
+    initClient(url, key);
+    await bootstrapSession();
+    if (!state.session) {
+      setView("auth");
+      setMessage(configMessage, "Da luu cau hinh", false);
+    }
+  } catch (err) {
+    setMessage(configMessage, err.message || "Cau hinh Supabase khong hop le", true);
+  }
+});
+
+loginForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  setMessage(authMessage, "");
+
+  const email = document.getElementById("email").value.trim();
   const password = document.getElementById("password").value;
 
-  apiBase = (apiBaseInput?.value || "").trim();
-  localStorage.setItem("apiBase", apiBase);
+  const { data, error } = await state.supabase.auth.signInWithPassword({ email, password });
 
-  try {
-    const data = await api("/api/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ username, password })
-    });
-
-    state.token = data.token;
-    state.user = data.user;
-
-    welcome.textContent = `Xin chao, ${state.user.username}`;
-    roleBadge.textContent = `Role: ${state.user.role}`;
-
-    loginCard.classList.add("hidden");
-    appPanel.classList.remove("hidden");
-
-    await refreshData();
-  } catch (err) {
-    setMessage(loginMessage, err.message, true);
-  }
-});
-
-txForm.addEventListener("submit", async e => {
-  e.preventDefault();
-  setMessage(txMessage, "");
-
-  const payload = {
-    tenGiaoDich: document.getElementById("txName").value.trim(),
-    soTien: Number(document.getElementById("txAmount").value),
-    ngayGiaoDich: document.getElementById("txDate").value,
-    idDanhMuc: txCategory.value,
-    idVi: txWallet.value,
-    ghiChu: document.getElementById("txNote").value.trim()
-  };
-
-  try {
-    await api("/api/transactions", { method: "POST", body: JSON.stringify(payload) });
-    setMessage(txMessage, "Them giao dich thanh cong", false);
-    txForm.reset();
-    await refreshData();
-  } catch (err) {
-    setMessage(txMessage, err.message, true);
-  }
-});
-
-userCreateForm.addEventListener("submit", async e => {
-  e.preventDefault();
-  setMessage(adminMessage, "");
-
-  const payload = {
-    tenTaiKhoan: document.getElementById("newUsername").value.trim(),
-    email: document.getElementById("newEmail").value.trim(),
-    matKhau: document.getElementById("newPassword").value,
-    vaiTro: document.getElementById("newRole").value
-  };
-
-  try {
-    await api("/api/admin/users", { method: "POST", body: JSON.stringify(payload) });
-    setMessage(adminMessage, "Tao user thanh cong", false);
-    userCreateForm.reset();
-    const users = await api("/api/admin/users");
-    renderUserRows(users);
-  } catch (err) {
-    setMessage(adminMessage, err.message, true);
-  }
-});
-
-logoutBtn.addEventListener("click", () => {
-  state.token = null;
-  state.user = null;
-  appPanel.classList.add("hidden");
-  loginCard.classList.remove("hidden");
-});
-
-window.updateUser = async function updateUser(id) {
-  setMessage(adminMessage, "");
-
-  const email = document.getElementById(`email-${id}`).value.trim();
-  const vaiTro = document.getElementById(`role-${id}`).value;
-  const matKhau = prompt("Nhap mat khau moi cho user (bat buoc de update):");
-
-  if (!matKhau) {
-    setMessage(adminMessage, "Ban da huy cap nhat", true);
+  if (error) {
+    setMessage(authMessage, error.message, true);
     return;
   }
 
-  try {
-    await api(`/api/admin/users/${id}`, {
-      method: "PUT",
-      body: JSON.stringify({ email, vaiTro, matKhau })
-    });
-    setMessage(adminMessage, `Cap nhat user ${id} thanh cong`, false);
-    const users = await api("/api/admin/users");
-    renderUserRows(users);
-  } catch (err) {
-    setMessage(adminMessage, err.message, true);
-  }
-};
+  state.session = data.session;
+  await getProfile(state.session.user.id);
+  welcome.textContent = `Xin chao, ${state.profile.username || state.session.user.email}`;
+  roleBadge.textContent = `Role: ${state.profile.role || "user"}`;
 
-window.deleteUser = async function deleteUser(id) {
-  if (!confirm(`Xoa user ${id}?`)) {
+  setView("app");
+  await refreshData();
+});
+
+signupBtn.addEventListener("click", async () => {
+  setMessage(authMessage, "");
+  const email = document.getElementById("email").value.trim();
+  const password = document.getElementById("password").value;
+
+  if (!email || !password) {
+    setMessage(authMessage, "Nhap email va mat khau de tao tai khoan", true);
     return;
   }
 
-  try {
-    await api(`/api/admin/users/${id}`, { method: "DELETE" });
-    setMessage(adminMessage, `Xoa user ${id} thanh cong`, false);
-    const users = await api("/api/admin/users");
-    renderUserRows(users);
-  } catch (err) {
-    setMessage(adminMessage, err.message, true);
+  const { error } = await state.supabase.auth.signUp({ email, password });
+  if (error) {
+    setMessage(authMessage, error.message, true);
+    return;
   }
-};
+
+  setMessage(authMessage, "Da tao tai khoan. Kiem tra email neu bat confirm.", false);
+});
+
+logoutBtn.addEventListener("click", async () => {
+  await state.supabase.auth.signOut();
+  state.session = null;
+  state.profile = null;
+  state.wallets = [];
+  state.categories = [];
+  state.transactions = [];
+  setView("auth");
+});
+
+changeConfigBtn.addEventListener("click", async () => {
+  if (state.supabase) {
+    await state.supabase.auth.signOut();
+  }
+  state.session = null;
+  state.profile = null;
+  setView("config");
+});
+
+walletForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  setMessage(appMessage, "");
+
+  const name = document.getElementById("walletName").value.trim();
+  const walletType = document.getElementById("walletType").value.trim();
+
+  if (!name || !walletType) {
+    setMessage(appMessage, "Nhap ten va loai vi", true);
+    return;
+  }
+
+  const { error } = await state.supabase.from("wallets").insert({
+    owner_id: state.session.user.id,
+    name,
+    wallet_type: walletType,
+    balance: 0
+  });
+
+  if (error) {
+    setMessage(appMessage, error.message, true);
+    return;
+  }
+
+  walletForm.reset();
+  setMessage(appMessage, "Them vi thanh cong", false);
+  await refreshData();
+});
+
+categoryForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  setMessage(appMessage, "");
+
+  const name = document.getElementById("categoryName").value.trim();
+  const kind = document.getElementById("categoryKind").value;
+
+  if (!name || !kind) {
+    setMessage(appMessage, "Nhap ten danh muc", true);
+    return;
+  }
+
+  const { error } = await state.supabase.from("categories").insert({
+    owner_id: state.session.user.id,
+    name,
+    kind
+  });
+
+  if (error) {
+    setMessage(appMessage, error.message, true);
+    return;
+  }
+
+  categoryForm.reset();
+  setMessage(appMessage, "Them danh muc thanh cong", false);
+  await refreshData();
+});
+
+txForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  setMessage(appMessage, "");
+
+  if (!state.wallets.length || !state.categories.length) {
+    setMessage(appMessage, "Can tao it nhat 1 vi va 1 danh muc truoc", true);
+    return;
+  }
+
+  const payload = {
+    owner_id: state.session.user.id,
+    title: document.getElementById("txName").value.trim(),
+    amount: Number(document.getElementById("txAmount").value),
+    transaction_date: document.getElementById("txDate").value,
+    category_id: txCategory.value,
+    wallet_id: txWallet.value,
+    note: document.getElementById("txNote").value.trim() || null
+  };
+
+  const { error } = await state.supabase.from("transactions").insert(payload);
+  if (error) {
+    setMessage(appMessage, error.message, true);
+    return;
+  }
+
+  txForm.reset();
+  setMessage(appMessage, "Them giao dich thanh cong", false);
+  await refreshData();
+});
+
+window.addEventListener("load", async () => {
+  if (savedUrl && savedKey) {
+    try {
+      initClient(savedUrl, savedKey);
+      await bootstrapSession();
+      if (!state.session) {
+        setView("auth");
+      }
+      return;
+    } catch (_err) {
+      setView("config");
+      return;
+    }
+  }
+
+  setView("config");
+});

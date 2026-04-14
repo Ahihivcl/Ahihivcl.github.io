@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Demo App QLCTCN</title>
+  <title>Supabase App QLCTCN</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;700&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
@@ -11,38 +11,70 @@
 </head>
 <body>
   <main class="shell">
-    <section id="loginCard" class="card login-card">
-      <h1>Dang nhap he thong</h1>
-      <p>Demo CSDL Quan Ly Chi Tieu Ca Nhan</p>
-      <form id="loginForm">
-        <label for="apiBase">API URL (de trong neu dung cung domain)</label>
-        <input id="apiBase" name="apiBase" placeholder="vi du: https://qlctcn-app.onrender.com">
+    <section id="configCard" class="card login-card">
+      <h1>Cau hinh Supabase</h1>
+      <p>Nhap Project URL va Publishable key de bat dau.</p>
+      <form id="configForm">
+        <label for="supabaseUrl">Project URL</label>
+        <input id="supabaseUrl" name="supabaseUrl" placeholder="https://xxxx.supabase.co" required>
 
-        <label for="username">Ten tai khoan</label>
-        <input id="username" name="username" placeholder="vi du: lethanh" required>
+        <label for="supabaseKey">Publishable key</label>
+        <input id="supabaseKey" name="supabaseKey" placeholder="sb_publishable_..." required>
+
+        <button type="submit">Luu cau hinh</button>
+      </form>
+      <p id="configMessage" class="message"></p>
+    </section>
+
+    <section id="authCard" class="card login-card hidden">
+      <h2>Dang nhap Supabase</h2>
+      <p>Dung email/password da tao trong Authentication.</p>
+      <form id="loginForm">
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" placeholder="ban@example.com" required>
 
         <label for="password">Mat khau</label>
-        <input id="password" name="password" type="password" placeholder="vi du: thanh456" required>
+        <input id="password" name="password" type="password" required>
 
         <button type="submit">Dang nhap</button>
       </form>
-      <p id="loginMessage" class="message"></p>
+      <button id="signupBtn" class="outline" type="button">Tao tai khoan moi</button>
+      <p id="authMessage" class="message"></p>
     </section>
 
     <section id="appPanel" class="card hidden">
       <header class="topbar">
         <div>
           <h2 id="welcome">Xin chao</h2>
-          <p id="roleBadge" class="badge"></p>
+          <p id="roleBadge" class="badge">Role: user</p>
         </div>
-        <button id="logoutBtn" class="outline">Dang xuat</button>
+        <div class="top-actions">
+          <button id="changeConfigBtn" class="outline" type="button">Doi key</button>
+          <button id="logoutBtn" class="outline" type="button">Dang xuat</button>
+        </div>
       </header>
 
       <section class="metrics" id="metrics"></section>
 
       <section class="grid">
         <article class="box">
-          <h3>Giao dich</h3>
+          <h3>Tao du lieu test</h3>
+          <form id="walletForm" class="stack">
+            <input id="walletName" placeholder="Ten vi (vd: Momo)" required>
+            <input id="walletType" placeholder="Loai vi (vd: e-wallet)" required>
+            <button type="submit">Them vi</button>
+          </form>
+          <form id="categoryForm" class="stack mt8">
+            <input id="categoryName" placeholder="Ten danh muc" required>
+            <select id="categoryKind" required>
+              <option value="expense">expense</option>
+              <option value="income">income</option>
+              <option value="long_term">long_term</option>
+            </select>
+            <button type="submit">Them danh muc</button>
+          </form>
+
+          <h3 class="mt16">Giao dich</h3>
           <form id="txForm" class="stack">
             <input id="txName" placeholder="Ten giao dich" required>
             <input id="txAmount" type="number" min="1" step="0.01" placeholder="So tien" required>
@@ -52,11 +84,11 @@
             <input id="txNote" placeholder="Ghi chu (khong bat buoc)">
             <button type="submit">Them giao dich</button>
           </form>
-          <p id="txMessage" class="message"></p>
+          <p id="appMessage" class="message"></p>
         </article>
 
         <article class="box">
-          <h3>Danh sach giao dich gan day</h3>
+          <h3>Danh sach giao dich (RLS)</h3>
           <div class="table-wrap">
             <table>
               <thead>
@@ -65,7 +97,8 @@
                   <th>Ten</th>
                   <th>So tien</th>
                   <th>Ngay</th>
-                  <th>User</th>
+                  <th>Danh muc</th>
+                  <th>Vi</th>
                 </tr>
               </thead>
               <tbody id="txTable"></tbody>
@@ -73,39 +106,10 @@
           </div>
         </article>
       </section>
-
-      <section id="adminSection" class="box hidden">
-        <h3>Admin CRUD User</h3>
-        <form id="userCreateForm" class="stack inline-grid">
-          <input id="newUsername" placeholder="Ten tai khoan" required>
-          <input id="newEmail" placeholder="Email" required>
-          <input id="newPassword" placeholder="Mat khau" required>
-          <select id="newRole" required>
-            <option value="user">user</option>
-            <option value="admin">admin</option>
-          </select>
-          <button type="submit">Tao user</button>
-        </form>
-        <p id="adminMessage" class="message"></p>
-
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Ten TK</th>
-                <th>Email</th>
-                <th>Vai tro</th>
-                <th>Hanh dong</th>
-              </tr>
-            </thead>
-            <tbody id="userTable"></tbody>
-          </table>
-        </div>
-      </section>
     </section>
   </main>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="app.js"></script>
 </body>
 </html>
