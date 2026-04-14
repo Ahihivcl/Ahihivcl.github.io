@@ -91,6 +91,35 @@ async function ensureNguoiDungRecord(userId) {
   }
 
   const email = state.session.user.email || "";
+
+  const byEmail = await state.supabase
+    .from("nguoidung")
+    .select("nguoidung_id, ten_tk, email, vai_tro")
+    .eq("email", email)
+    .is("auth_user_id", null)
+    .single();
+
+  if (!byEmail.error && byEmail.data) {
+    const linkResult = await state.supabase
+      .from("nguoidung")
+      .update({ auth_user_id: userId })
+      .eq("nguoidung_id", byEmail.data.nguoidung_id)
+      .select("nguoidung_id, ten_tk, email, vai_tro")
+      .single();
+
+    if (linkResult.error) {
+      throw linkResult.error;
+    }
+
+    state.profile = linkResult.data;
+    state.nguoiDungId = linkResult.data.nguoidung_id;
+    return;
+  }
+
+  if (byEmail.error && byEmail.error.code !== "PGRST116") {
+    throw byEmail.error;
+  }
+
   const username = (email.split("@")[0] || "user").toLowerCase();
 
   const created = await state.supabase
