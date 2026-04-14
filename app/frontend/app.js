@@ -1,390 +1,263 @@
 const state = {
-  supabase: null,
-  session: null,
-  profile: null,
-  nguoiDungId: null,
+  token: null,
+  user: null,
   categories: [],
-  wallets: [],
-  transactions: []
+  wallets: []
 };
 
-const SUPABASE_URL = "https://dhfnyufxzlytrkadinpn.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_NXcJo9m1MMnlV6iO7KDHFA_E4YVGhD5";
+let apiBase = localStorage.getItem("apiBase") || "";
 
-const authCard = document.getElementById("authCard");
+const loginCard = document.getElementById("loginCard");
 const appPanel = document.getElementById("appPanel");
+const loginMessage = document.getElementById("loginMessage");
+const txMessage = document.getElementById("txMessage");
+const adminMessage = document.getElementById("adminMessage");
 
 const loginForm = document.getElementById("loginForm");
 const txForm = document.getElementById("txForm");
-const walletForm = document.getElementById("walletForm");
-const categoryForm = document.getElementById("categoryForm");
-
-const signupBtn = document.getElementById("signupBtn");
+const userCreateForm = document.getElementById("userCreateForm");
 const logoutBtn = document.getElementById("logoutBtn");
-
-const authMessage = document.getElementById("authMessage");
-const appMessage = document.getElementById("appMessage");
 
 const welcome = document.getElementById("welcome");
 const roleBadge = document.getElementById("roleBadge");
+const metrics = document.getElementById("metrics");
 const txTable = document.getElementById("txTable");
+const userTable = document.getElementById("userTable");
+const adminSection = document.getElementById("adminSection");
 
 const txCategory = document.getElementById("txCategory");
 const txWallet = document.getElementById("txWallet");
+const apiBaseInput = document.getElementById("apiBase");
+
+if (apiBaseInput) {
+  apiBaseInput.value = apiBase;
+}
 
 function setMessage(target, text, isError = true) {
   target.textContent = text || "";
   target.style.color = isError ? "#b64635" : "#0b7a3d";
 }
 
-function mapAuthError(error, action) {
-  const message = (error && error.message ? error.message : "").toLowerCase();
-  const status = error && (error.status || error.code);
-
-  if (status === 429 || message.includes("for security purposes")) {
-    return "Ban thao tac qua nhanh (rate limit). Doi 1-5 phut roi thu lai.";
+async function api(path, options = {}) {
+  const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
+  if (state.token) {
+    headers.Authorization = `Bearer ${state.token}`;
   }
 
-  if (message.includes("email not confirmed")) {
-    return "Email chua xac thuc. Vao hop thu va bam link xac nhan truoc khi dang nhap.";
+  const normalizedBase = apiBase.trim().replace(/\/$/, "");
+  const url = normalizedBase ? `${normalizedBase}${path}` : path;
+
+  const response = await fetch(url, { ...options, headers });
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(data.message || "Loi API");
   }
 
-  if (message.includes("invalid login credentials")) {
-    return "Sai email hoac mat khau. Luu y: dang nhap bang EMAIL, khong phai username cu.";
-  }
-
-  if (message.includes("email address") && message.includes("invalid")) {
-    return "Email khong hop le. Hay dung dia chi email that (vd: tenban@gmail.com).";
-  }
-
-  if (action === "signup") {
-    return error?.message || "Khong tao duoc tai khoan.";
-  }
-
-  return error?.message || "Dang nhap that bai.";
+  return data;
 }
 
-function setView(mode) {
-  authCard.classList.toggle("hidden", mode !== "auth");
-  appPanel.classList.toggle("hidden", mode !== "app");
-}
-
-function initClient() {
-  state.supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
-}
-
-async function ensureNguoiDungRecordByEmail(email) {
-  const normalizedEmail = String(email || "").trim().toLowerCase();
-  if (!normalizedEmail) {
-    throw new Error("Missing email from Supabase session.");
-  }
-
-  const existing = await state.supabase
-    .from("nguoidung")
-    .select("nguoidung_id, ten_tk, email, vai_tro")
-    .eq("email", normalizedEmail)
-    .single();
-
-  if (!existing.error && existing.data) {
-    state.profile = existing.data;
-    state.nguoiDungId = existing.data.nguoidung_id;
-    return;
-  }
-
-  if (existing.error && existing.error.code !== "PGRST116") {
-    throw existing.error;
-  }
-
-  const username = (normalizedEmail.split("@")[0] || "user").toLowerCase();
-
-  const created = await state.supabase
-    .from("nguoidung")
-    .insert({
-      ten_tk: username,
-      email: normalizedEmail,
-      mat_khau: "[supabase-auth]",
-      vai_tro: "user"
+function renderMetrics(data) {
+  const entries = Object.entries(data.metrics || {});
+  metrics.innerHTML = entries
+    .map(([k, v]) => {
+      const label = k
+        .replace(/([A-Z])/g, " $1")
+        .replace(/^./, c => c.toUpperCase());
+      return `<div class="metric"><div class="label">${label}</div><div class="value">${Number(v).toLocaleString("vi-VN")}</div></div>`;
     })
-    .select("nguoidung_id, ten_tk, email, vai_tro")
-    .single();
-
-  if (created.error) {
-    throw created.error;
-  }
-
-  state.profile = created.data;
-  state.nguoiDungId = created.data.nguoidung_id;
-}
-
-function fillOptions() {
-  txCategory.innerHTML = state.categories
-    .map(c => `<option value="${c.danhmuc_id}">${c.ten_danh_muc} (${c.loai_danh_muc})</option>`)
-    .join("");
-
-  txWallet.innerHTML = state.wallets
-    .map(w => `<option value="${w.vi_id}">${w.ten_vi} (${w.loai_vi})</option>`)
     .join("");
 }
 
-function renderTransactions() {
-  const categoryMap = new Map(state.categories.map(c => [c.danhmuc_id, c.ten_danh_muc]));
-  const walletMap = new Map(state.wallets.map(w => [w.vi_id, w.ten_vi]));
-
-  txTable.innerHTML = state.transactions
-    .map(tx => `
+function renderTransactions(rows) {
+  txTable.innerHTML = rows
+    .map(r => `
       <tr>
-        <td>${tx.giaodich_id}</td>
-        <td>${tx.ten_giao_dich}</td>
-        <td>${Number(tx.so_tien).toLocaleString("vi-VN")}</td>
-        <td>${String(tx.ngay_giao_dich).slice(0, 10)}</td>
-        <td>${categoryMap.get(tx.id_danh_muc) || "-"}</td>
-        <td>${walletMap.get(tx.id_vi_tien) || "-"}</td>
+        <td>${r.GiaoDich_ID}</td>
+        <td>${r.Ten_giao_dich}</td>
+        <td>${Number(r.So_tien).toLocaleString("vi-VN")}</td>
+        <td>${String(r.Ngay_giao_dich).slice(0, 10)}</td>
+        <td>${r.ID_nguoi_dung}</td>
       </tr>
     `)
     .join("");
 }
 
-async function refreshData() {
-  const userId = state.nguoiDungId;
+function renderUserRows(rows) {
+  userTable.innerHTML = rows
+    .map(
+      r => `
+      <tr>
+        <td>${r.NguoiDung_ID}</td>
+        <td>${r.Ten_TK}</td>
+        <td><input id="email-${r.NguoiDung_ID}" value="${r.Email || ""}"></td>
+        <td>
+          <select id="role-${r.NguoiDung_ID}">
+            <option value="user" ${r.Vai_tro === "user" ? "selected" : ""}>user</option>
+            <option value="admin" ${r.Vai_tro === "admin" ? "selected" : ""}>admin</option>
+          </select>
+        </td>
+        <td>
+          <button class="action-btn btn-edit" onclick="updateUser('${r.NguoiDung_ID}')">Sua</button>
+          <button class="action-btn btn-delete" onclick="deleteUser('${r.NguoiDung_ID}')">Xoa</button>
+        </td>
+      </tr>
+    `
+    )
+    .join("");
+}
 
-  const [walletRes, categoryRes, txRes] = await Promise.all([
-    state.supabase
-      .from("vitien")
-      .select("vi_id,ten_vi,loai_vi")
-      .eq("id_nguoi_dung", userId)
-      .order("vi_id", { ascending: true }),
-    state.supabase
-      .from("danhmuc")
-      .select("danhmuc_id,ten_danh_muc,loai_danh_muc")
-      .order("danhmuc_id", { ascending: true }),
-    state.supabase
-      .from("giaodich")
-      .select("giaodich_id,ten_giao_dich,so_tien,ngay_giao_dich,id_danh_muc,id_vi_tien")
-      .eq("id_nguoi_dung", userId)
-      .order("ngay_giao_dich", { ascending: false })
-      .limit(100)
+function fillOptions() {
+  txCategory.innerHTML = state.categories
+    .map(c => `<option value="${c.DanhMuc_ID}">${c.DanhMuc_ID} - ${c.Ten_danh_muc}</option>`)
+    .join("");
+
+  txWallet.innerHTML = state.wallets
+    .map(w => `<option value="${w.Vi_ID}">${w.Vi_ID} - ${w.Ten_vi} (${w.ID_nguoi_dung})</option>`)
+    .join("");
+}
+
+async function refreshData() {
+  const [dash, meta, txs] = await Promise.all([
+    api("/api/dashboard"),
+    api("/api/meta"),
+    api("/api/transactions")
   ]);
 
-  if (walletRes.error) {
-    throw walletRes.error;
-  }
-  if (categoryRes.error) {
-    throw categoryRes.error;
-  }
-  if (txRes.error) {
-    throw txRes.error;
-  }
-
-  state.wallets = walletRes.data || [];
-  state.categories = categoryRes.data || [];
-  state.transactions = txRes.data || [];
-
+  renderMetrics(dash);
+  state.categories = meta.categories || [];
+  state.wallets = meta.wallets || [];
   fillOptions();
-  renderTransactions();
+  renderTransactions(txs);
+
+  if (state.user.role === "admin") {
+    adminSection.classList.remove("hidden");
+    const users = await api("/api/admin/users");
+    renderUserRows(users);
+  } else {
+    adminSection.classList.add("hidden");
+  }
 }
 
-async function bootstrapSession() {
-  const { data } = await state.supabase.auth.getSession();
-  if (!data.session) {
-    setView("auth");
-    return;
-  }
+loginForm.addEventListener("submit", async e => {
+  e.preventDefault();
+  setMessage(loginMessage, "");
 
-  state.session = data.session;
-  await ensureNguoiDungRecordByEmail(state.session.user.email);
-
-  welcome.textContent = `Xin chao, ${state.profile.ten_tk || state.session.user.email}`;
-  roleBadge.textContent = `Role: ${state.profile.vai_tro || "user"}`;
-
-  setView("app");
-  await refreshData();
-}
-
-loginForm.addEventListener("submit", async event => {
-  event.preventDefault();
-  setMessage(authMessage, "");
-
-  const email = document.getElementById("email").value.trim();
+  const username = document.getElementById("username").value.trim();
   const password = document.getElementById("password").value;
 
-  const { data, error } = await state.supabase.auth.signInWithPassword({ email, password });
+  apiBase = (apiBaseInput?.value || "").trim();
+  localStorage.setItem("apiBase", apiBase);
 
-  if (error) {
-    setMessage(authMessage, mapAuthError(error, "login"), true);
-    return;
+  try {
+    const data = await api("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ username, password })
+    });
+
+    state.token = data.token;
+    state.user = data.user;
+
+    welcome.textContent = `Xin chao, ${state.user.username}`;
+    roleBadge.textContent = `Role: ${state.user.role}`;
+
+    loginCard.classList.add("hidden");
+    appPanel.classList.remove("hidden");
+
+    await refreshData();
+  } catch (err) {
+    setMessage(loginMessage, err.message, true);
   }
-
-  state.session = data.session;
-  await ensureNguoiDungRecordByEmail(state.session.user.email);
-
-  welcome.textContent = `Xin chao, ${state.profile.ten_tk || state.session.user.email}`;
-  roleBadge.textContent = `Role: ${state.profile.vai_tro || "user"}`;
-
-  setView("app");
-  await refreshData();
 });
 
-signupBtn.addEventListener("click", async () => {
-  setMessage(authMessage, "");
-  const email = document.getElementById("email").value.trim();
-  const password = document.getElementById("password").value;
-
-  if (!email || !password) {
-    setMessage(authMessage, "Nhap email va mat khau de tao tai khoan", true);
-    return;
-  }
-
-  const { error } = await state.supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      emailRedirectTo: window.location.href
-    }
-  });
-
-  if (error) {
-    setMessage(authMessage, mapAuthError(error, "signup"), true);
-    return;
-  }
-
-  setMessage(authMessage, "Da tao tai khoan. Neu project bat confirm email, hay mo mail de xac thuc roi dang nhap.", false);
-});
-
-logoutBtn.addEventListener("click", async () => {
-  await state.supabase.auth.signOut();
-  state.session = null;
-  state.profile = null;
-  state.nguoiDungId = null;
-  state.wallets = [];
-  state.categories = [];
-  state.transactions = [];
-  setView("auth");
-});
-
-walletForm.addEventListener("submit", async event => {
-  event.preventDefault();
-  setMessage(appMessage, "");
-
-  const name = document.getElementById("walletName").value.trim();
-  const walletType = document.getElementById("walletType").value.trim();
-
-  if (!name || !walletType) {
-    setMessage(appMessage, "Nhap ten va loai vi", true);
-    return;
-  }
-
-  const { error } = await state.supabase.from("vitien").insert({
-    ten_vi: name,
-    loai_vi: walletType,
-    so_du_hien_tai: 0,
-    ngay_tao: new Date().toISOString().slice(0, 10),
-    id_nguoi_dung: state.nguoiDungId
-  });
-
-  if (error) {
-    setMessage(appMessage, error.message, true);
-    return;
-  }
-
-  walletForm.reset();
-  setMessage(appMessage, "Them vi thanh cong", false);
-  await refreshData();
-});
-
-categoryForm.addEventListener("submit", async event => {
-  event.preventDefault();
-  setMessage(appMessage, "");
-
-  const name = document.getElementById("categoryName").value.trim();
-  const kind = document.getElementById("categoryKind").value;
-
-  if (!name || !kind) {
-    setMessage(appMessage, "Nhap ten danh muc", true);
-    return;
-  }
-
-  const loaiDanhMucMap = {
-    expense: "Phat sinh",
-    income: "Cong viec",
-    long_term: "Dau tu"
-  };
-
-  const insertCategory = await state.supabase
-    .from("danhmuc")
-    .insert({
-      ten_danh_muc: name,
-      loai_danh_muc: loaiDanhMucMap[kind] || "Phat sinh",
-      mo_ta: "Danh muc tao tren app"
-    })
-    .select("danhmuc_id")
-    .single();
-
-  if (insertCategory.error) {
-    setMessage(appMessage, insertCategory.error.message, true);
-    return;
-  }
-
-  const categoryId = insertCategory.data.danhmuc_id;
-  const subTable = kind === "income" ? "thunhap" : (kind === "long_term" ? "taichinhdaihan" : "chitieu");
-
-  const subInsert = await state.supabase.from(subTable).insert(
-    subTable === "thunhap"
-      ? { thunhap_id: categoryId }
-      : subTable === "taichinhdaihan"
-      ? { taichinhdaihan_id: categoryId }
-      : { chitieu_id: categoryId }
-  );
-
-  if (subInsert.error) {
-    setMessage(appMessage, subInsert.error.message, true);
-    return;
-  }
-
-  categoryForm.reset();
-  setMessage(appMessage, "Them danh muc thanh cong", false);
-  await refreshData();
-});
-
-txForm.addEventListener("submit", async event => {
-  event.preventDefault();
-  setMessage(appMessage, "");
-
-  if (!state.wallets.length || !state.categories.length) {
-    setMessage(appMessage, "Can tao it nhat 1 vi va 1 danh muc truoc", true);
-    return;
-  }
+txForm.addEventListener("submit", async e => {
+  e.preventDefault();
+  setMessage(txMessage, "");
 
   const payload = {
-    ten_giao_dich: document.getElementById("txName").value.trim(),
-    so_tien: Number(document.getElementById("txAmount").value),
-    ngay_giao_dich: document.getElementById("txDate").value,
-    id_danh_muc: txCategory.value,
-    id_vi_tien: txWallet.value,
-    id_nguoi_dung: state.nguoiDungId,
-    ghi_chu: document.getElementById("txNote").value.trim() || null
+    tenGiaoDich: document.getElementById("txName").value.trim(),
+    soTien: Number(document.getElementById("txAmount").value),
+    ngayGiaoDich: document.getElementById("txDate").value,
+    idDanhMuc: txCategory.value,
+    idVi: txWallet.value,
+    ghiChu: document.getElementById("txNote").value.trim()
   };
 
-  const { error } = await state.supabase.from("giaodich").insert(payload);
-  if (error) {
-    setMessage(appMessage, error.message, true);
+  try {
+    await api("/api/transactions", { method: "POST", body: JSON.stringify(payload) });
+    setMessage(txMessage, "Them giao dich thanh cong", false);
+    txForm.reset();
+    await refreshData();
+  } catch (err) {
+    setMessage(txMessage, err.message, true);
+  }
+});
+
+userCreateForm.addEventListener("submit", async e => {
+  e.preventDefault();
+  setMessage(adminMessage, "");
+
+  const payload = {
+    tenTaiKhoan: document.getElementById("newUsername").value.trim(),
+    email: document.getElementById("newEmail").value.trim(),
+    matKhau: document.getElementById("newPassword").value,
+    vaiTro: document.getElementById("newRole").value
+  };
+
+  try {
+    await api("/api/admin/users", { method: "POST", body: JSON.stringify(payload) });
+    setMessage(adminMessage, "Tao user thanh cong", false);
+    userCreateForm.reset();
+    const users = await api("/api/admin/users");
+    renderUserRows(users);
+  } catch (err) {
+    setMessage(adminMessage, err.message, true);
+  }
+});
+
+logoutBtn.addEventListener("click", () => {
+  state.token = null;
+  state.user = null;
+  appPanel.classList.add("hidden");
+  loginCard.classList.remove("hidden");
+});
+
+window.updateUser = async function updateUser(id) {
+  setMessage(adminMessage, "");
+
+  const email = document.getElementById(`email-${id}`).value.trim();
+  const vaiTro = document.getElementById(`role-${id}`).value;
+  const matKhau = prompt("Nhap mat khau moi cho user (bat buoc de update):");
+
+  if (!matKhau) {
+    setMessage(adminMessage, "Ban da huy cap nhat", true);
     return;
   }
 
-  txForm.reset();
-  setMessage(appMessage, "Them giao dich thanh cong", false);
-  await refreshData();
-});
-
-window.addEventListener("load", async () => {
   try {
-    initClient();
-    await bootstrapSession();
-    if (!state.session) {
-      setView("auth");
-    }
+    await api(`/api/admin/users/${id}`, {
+      method: "PUT",
+      body: JSON.stringify({ email, vaiTro, matKhau })
+    });
+    setMessage(adminMessage, `Cap nhat user ${id} thanh cong`, false);
+    const users = await api("/api/admin/users");
+    renderUserRows(users);
   } catch (err) {
-    const detail = err?.message ? ` Chi tiet: ${err.message}` : "";
-    setMessage(authMessage, `Khong ket noi duoc Supabase hoac schema chua dung. Hay chay file supabase_full_migration.sql.${detail}`, true);
-    setView("auth");
+    setMessage(adminMessage, err.message, true);
   }
-});
+};
+
+window.deleteUser = async function deleteUser(id) {
+  if (!confirm(`Xoa user ${id}?`)) {
+    return;
+  }
+
+  try {
+    await api(`/api/admin/users/${id}`, { method: "DELETE" });
+    setMessage(adminMessage, `Xoa user ${id} thanh cong`, false);
+    const users = await api("/api/admin/users");
+    renderUserRows(users);
+  } catch (err) {
+    setMessage(adminMessage, err.message, true);
+  }
+};

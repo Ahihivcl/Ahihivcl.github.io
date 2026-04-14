@@ -1,102 +1,73 @@
-# Demo CSDL Quan Ly Chi Tieu Ca Nhan
+# Demo QLCTCN: GitHub Pages + Supabase
 
-Ban co the deploy app len web de nguoi dung dang nhap va su dung truc tiep online (khong can localhost).
+Muc tieu cua repo nay:
 
-Ung dung da co san:
+- Frontend dat tren GitHub Pages.
+- Database dat tren Supabase PostgreSQL.
+- Backend API host cloud (Render), frontend github.io goi vao API do.
 
-- Dang nhap role `admin` / `user`
-- User them giao dich, xem dashboard va du lieu cua minh
-- Admin CRUD user tren database
+## Kien truc
 
-## Cau truc
+- `index.html`: redirect nhanh toi giao dien app.
+- `app/frontend`: giao dien dang nhap, dashboard, giao dich, admin CRUD user.
+- `app/backend`: Express API + JWT + PostgreSQL (`pg`).
+- `supabase/schema.sql`: script tao bang va seed mau cho Supabase.
+- `render.yaml`: blueprint deploy backend len Render.
 
-- `TableQuanLyChiTieuCaNhan_v2.sql`: script tao DB, bang, du lieu mau, trigger, view, stored procedure va cap quyen.
-- `index.html`, `styles.css`: trang gioi thieu cho GitHub Pages.
-- `app/backend`: API Express + SQL Server + JWT auth (dong thoi serve frontend).
-- `app/frontend`: giao dien dang nhap/dashboard.
-- `render.yaml`: cau hinh deploy cloud tren Render.
+## 1) Tao database tren Supabase
 
-## Deploy online full app (khuyen nghi)
+1. Tao project Supabase.
+2. Vao SQL Editor.
+3. Chay file `supabase/schema.sql`.
+4. Xac nhan co du lieu mau:
 
-## Buoc tiep theo ngay bay gio (Azure da co data)
+```sql
+SELECT * FROM app_users;
+SELECT * FROM categories;
+SELECT * FROM wallets;
+SELECT * FROM transactions;
+```
 
-1. Day code len GitHub.
-2. Vao Render, tao service bang Blueprint tu repo nay.
-3. Trong Render, dien env theo mau trong `app/backend/.env.render.example`.
-4. Bam Deploy va doi build xong.
-5. Mo URL Render, dang nhap bang tai khoan admin mau de test.
-6. Neu frontend khong cung domain API, nhap API URL ngay man hinh login.
-
-Checklist test sau deploy:
-
-1. Dang nhap admin thanh cong.
-2. Tao user moi trong khu Admin CRUD.
-3. Dang nhap user moi vua tao.
-4. Them 1 giao dich va kiem tra hien trong danh sach.
-5. Kiem tra dong moi duoc ghi trong Azure SQL.
-
-### A. Chuan bi SQL Server cloud
-
-Dung 1 trong 2 cach:
-
-1. Azure SQL Database (de nhat).
-2. SQL Server tren VM cloud (Azure/AWS/GCP) mo cong 1433.
-
-Sau do chay file `TableQuanLyChiTieuCaNhan_v2.sql` len database cloud do.
-
-### B. Deploy backend + frontend len Render
-
-1. Push repo len GitHub.
-2. Dang nhap Render va chon `New` -> `Blueprint`.
-3. Chon repo nay, Render se doc file `render.yaml`.
-4. Dien env secret:
-	- `JWT_SECRET`
-	- `DB_USER`
-	- `DB_PASSWORD`
-	- `DB_SERVER`
-5. Bam deploy.
-6. Sau khi xong, truy cap URL Render de vao app (vi du: `https://qlctcn-demo-app.onrender.com`).
-
-Luu y:
-
-- App tren Render da phuc vu ca frontend va API trong cung mot domain.
-- Khong can host frontend rieng neu ban dung cach nay.
-
-## Dang nhap demo
-
-Tai khoan mau co trong script SQL:
+Tai khoan demo sau seed:
 
 - Admin: `lethanh` / `thanh456`
 - User: `nguyenhoang` / `hoang123`
 
-## Neu van muon giu GitHub Pages
+## 2) Deploy backend API (Render)
 
-GitHub Pages chi dung cho static page, khong ket noi truc tiep SQL Server.
+1. Push repo len GitHub.
+2. Vao Render -> `New` -> `Blueprint` -> chon repo.
+3. Render doc `render.yaml` va tao web service.
+4. Set env vars trong Render:
 
-Ban co the:
+- `JWT_SECRET`: chuoi bi mat dai.
+- `DATABASE_URL`: connection string Postgres cua Supabase (pooler).
+- `DB_SSL`: `true`.
+- `CORS_ORIGIN`: domain GitHub Pages cua ban, vi du `https://yourname.github.io`.
 
-1. Van de [index.html](index.html) lam trang gioi thieu tren Pages.
-2. Gan nut "Mo app" tro toi URL Render cua app that.
+5. Deploy xong, lay API URL, vi du `https://qlctcn-demo-app.onrender.com`.
 
-## Chay local (tuy chon)
+## 3) Chay frontend tren GitHub Pages
 
-1. Mo SQL Server Management Studio (SSMS) hoac Azure Data Studio.
-2. Ket noi truc tiep vao database `QuanLyChiTieuCaNhan`.
-3. Mo file `TableQuanLyChiTieuCaNhan_v2.sql`.
-4. Neu can reset DB, set `@ForceRecreate = 1` va chi dung tren SQL Server on-prem/MI.
-5. Execute script.
+1. Bat GitHub Pages cho repo (branch `main`, folder root).
+2. Mo URL Pages: `https://<username>.github.io/<repo>/`.
+3. Man hinh login co o `app/frontend/index.html`.
+4. O truong `API URL`, nhap URL backend Render o buoc 2.
+5. Dang nhap va su dung.
 
-Luu y: tren Azure SQL Database, khong dung `USE master` hoac `CREATE DATABASE` trong cung file script. Hay tao database truoc, sau do ket noi thang vao database do truoc khi chay file.
+## 4) Checklist test end-to-end
 
-Kiem tra nhanh:
+1. Dang nhap admin thanh cong.
+2. Tao user moi trong bang Admin.
+3. Dang nhap user moi vua tao.
+4. Them giao dich.
+5. Kiem tra transaction moi trong Supabase SQL Editor.
 
-```sql
-SELECT COUNT(*) AS SoNguoiDung FROM NguoiDung;
-SELECT COUNT(*) AS SoGiaoDich FROM GiaoDich;
-SELECT TOP 5 NguoiDung_ID, Ten_TK, Vai_tro FROM NguoiDung;
-```
+## Local (tuy chon)
 
-1. Vao `app/backend`.
-2. Tao `.env` tu `.env.example`.
-3. Chay `npm install` va `npm start`.
+Neu can chay local backend:
+
+1. Tao `.env` tu `app/backend/.env.example`.
+2. Trong `app/backend`, chay `npm install`.
+3. Chay `npm start`.
 4. Mo `http://localhost:3000`.

@@ -11,17 +11,9 @@ services:
         value: 20
       - key: JWT_SECRET
         sync: false
-      - key: DB_USER
+      - key: DATABASE_URL
         sync: false
-      - key: DB_PASSWORD
-        sync: false
-      - key: DB_SERVER
-        sync: false
-      - key: DB_PORT
-        value: 1433
-      - key: DB_NAME
-        value: QuanLyChiTieuCaNhan
-      - key: DB_ENCRYPT
+      - key: DB_SSL
         value: true
-      - key: DB_TRUST_SERVER_CERT
-        value: false
+      - key: CORS_ORIGIN
+        sync: false

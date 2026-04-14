@@ -1,34 +1,28 @@
-const sql = require("mssql");
-
-const config = {
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  server: process.env.DB_SERVER,
-  port: Number(process.env.DB_PORT || 1433),
-  database: process.env.DB_NAME,
-  options: {
-    encrypt: String(process.env.DB_ENCRYPT || "false") === "true",
-    trustServerCertificate: String(process.env.DB_TRUST_SERVER_CERT || "true") === "true"
-  },
-  pool: {
-    max: 10,
-    min: 0,
-    idleTimeoutMillis: 30000
-  }
-};
+const { Pool } = require("pg");
 
 let pool;
 
-async function getPool() {
+function getPool() {
   if (pool) {
     return pool;
   }
 
-  pool = await sql.connect(config);
+  const sslEnabled = String(process.env.DB_SSL || "true") === "true";
+  pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    max: Number(process.env.DB_POOL_MAX || 10),
+    ssl: sslEnabled ? { rejectUnauthorized: false } : false
+  });
+
   return pool;
 }
 
+async function query(text, params = []) {
+  const db = getPool();
+  return db.query(text, params);
+}
+
 module.exports = {
-  sql,
-  getPool
+  getPool,
+  query
 };

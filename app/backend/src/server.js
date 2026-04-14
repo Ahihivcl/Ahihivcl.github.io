@@ -3,18 +3,19 @@ require("dotenv").config();
 const path = require("path");
 const express = require("express");
 const cors = require("cors");
-const { getPool, sql } = require("./db");
+const { query } = require("./db");
 const { signToken, requireAuth, requireAdmin } = require("./auth");
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
+const CORS_ORIGIN = process.env.CORS_ORIGIN || "*";
 
-app.use(cors());
+app.use(cors({ origin: CORS_ORIGIN === "*" ? true : CORS_ORIGIN }));
 app.use(express.json());
 
 app.get("/health", async (_req, res) => {
   try {
-    await getPool();
+    await query("SELECT 1");
     res.json({ ok: true, message: "API dang chay" });
   } catch (err) {
     res.status(500).json({ ok: false, message: "Khong ket noi duoc DB", error: err.message });
@@ -29,18 +30,17 @@ app.post("/api/auth/login", async (req, res) => {
   }
 
   try {
-    const pool = await getPool();
-    const result = await pool
-      .request()
-      .input("username", sql.VarChar(100), username)
-      .input("password", sql.VarChar(255), password)
-      .query(`
-        SELECT TOP 1 NguoiDung_ID, Ten_TK, Email, Vai_tro
-        FROM NguoiDung
-        WHERE Ten_TK = @username AND Mat_khau = @password
-      `);
+    const result = await query(
+      `
+      SELECT user_code AS "NguoiDung_ID", username AS "Ten_TK", email AS "Email", role AS "Vai_tro"
+      FROM app_users
+      WHERE username = $1 AND password = $2
+      LIMIT 1
+      `,
+      [username, password]
+    );
 
-    const user = result.recordset[0];
+    const user = result.rows[0];
     if (!user) {
       return res.status(401).json({ message: "Sai tai khoan hoac mat khau" });
     }
@@ -65,45 +65,41 @@ app.get("/api/me", requireAuth, (req, res) => {
 
 app.get("/api/dashboard", requireAuth, async (req, res) => {
   try {
-    const pool = await getPool();
-
     if (req.user.role === "admin") {
       const [users, wallets, txs] = await Promise.all([
-        pool.request().query("SELECT COUNT(*) AS total FROM NguoiDung"),
-        pool.request().query("SELECT COUNT(*) AS total FROM ViTien"),
-        pool.request().query("SELECT COUNT(*) AS total FROM GiaoDich")
+        query("SELECT COUNT(*)::int AS total FROM app_users"),
+        query("SELECT COUNT(*)::int AS total FROM wallets"),
+        query("SELECT COUNT(*)::int AS total FROM transactions")
       ]);
 
       return res.json({
         role: "admin",
         metrics: {
-          totalUsers: users.recordset[0].total,
-          totalWallets: wallets.recordset[0].total,
-          totalTransactions: txs.recordset[0].total
+          totalUsers: users.rows[0].total,
+          totalWallets: wallets.rows[0].total,
+          totalTransactions: txs.rows[0].total
         }
       });
     }
 
-    const summary = await pool
-      .request()
-      .input("userId", sql.VarChar(10), req.user.userId)
-      .query(`
-        SELECT
-          ISNULL(SUM(CASE WHEN TN.ThuNhap_ID IS NOT NULL THEN GD.So_tien ELSE 0 END), 0) AS TongThu,
-          ISNULL(SUM(CASE WHEN CT.ChiTieu_ID IS NOT NULL OR TCDH.TaiChinhDaiHan_ID IS NOT NULL THEN GD.So_tien ELSE 0 END), 0) AS TongChi
-        FROM GiaoDich GD
-        LEFT JOIN ThuNhap TN ON GD.ID_danh_muc = TN.ThuNhap_ID
-        LEFT JOIN ChiTieu CT ON GD.ID_danh_muc = CT.ChiTieu_ID
-        LEFT JOIN TaiChinhDaiHan TCDH ON GD.ID_danh_muc = TCDH.TaiChinhDaiHan_ID
-        WHERE GD.ID_nguoi_dung = @userId
-      `);
+    const summary = await query(
+      `
+      SELECT
+        COALESCE(SUM(CASE WHEN c.kind = 'income' THEN t.amount ELSE 0 END), 0) AS "TongThu",
+        COALESCE(SUM(CASE WHEN c.kind <> 'income' THEN t.amount ELSE 0 END), 0) AS "TongChi"
+      FROM transactions t
+      JOIN categories c ON c.category_code = t.category_code
+      WHERE t.user_code = $1
+      `,
+      [req.user.userId]
+    );
 
     return res.json({
       role: "user",
       metrics: {
-        totalIncome: summary.recordset[0].TongThu,
-        totalExpense: summary.recordset[0].TongChi,
-        balance: summary.recordset[0].TongThu - summary.recordset[0].TongChi
+        totalIncome: summary.rows[0].TongThu,
+        totalExpense: summary.rows[0].TongChi,
+        balance: Number(summary.rows[0].TongThu) - Number(summary.rows[0].TongChi)
       }
     });
   } catch (err) {
@@ -113,20 +109,30 @@ app.get("/api/dashboard", requireAuth, async (req, res) => {
 
 app.get("/api/meta", requireAuth, async (req, res) => {
   try {
-    const pool = await getPool();
-
-    const walletsQuery = req.user.role === "admin"
-      ? pool.request().query("SELECT Vi_ID, Ten_vi, ID_nguoi_dung FROM ViTien ORDER BY Vi_ID")
-      : pool.request()
-          .input("userId", sql.VarChar(10), req.user.userId)
-          .query("SELECT Vi_ID, Ten_vi, ID_nguoi_dung FROM ViTien WHERE ID_nguoi_dung = @userId ORDER BY Vi_ID");
+    const walletsPromise = req.user.role === "admin"
+      ? query(
+          `SELECT wallet_code AS "Vi_ID", wallet_name AS "Ten_vi", user_code AS "ID_nguoi_dung"
+           FROM wallets
+           ORDER BY wallet_code`
+        )
+      : query(
+          `SELECT wallet_code AS "Vi_ID", wallet_name AS "Ten_vi", user_code AS "ID_nguoi_dung"
+           FROM wallets
+           WHERE user_code = $1
+           ORDER BY wallet_code`,
+          [req.user.userId]
+        );
 
     const [wallets, categories] = await Promise.all([
-      walletsQuery,
-      pool.request().query("SELECT DanhMuc_ID, Ten_danh_muc FROM DanhMuc ORDER BY DanhMuc_ID")
+      walletsPromise,
+      query(
+        `SELECT category_code AS "DanhMuc_ID", category_name AS "Ten_danh_muc"
+         FROM categories
+         ORDER BY category_code`
+      )
     ]);
 
-    return res.json({ wallets: wallets.recordset, categories: categories.recordset });
+    return res.json({ wallets: wallets.rows, categories: categories.rows });
   } catch (err) {
     return res.status(500).json({ message: "Loi tai danh sach du lieu", error: err.message });
   }
@@ -134,33 +140,47 @@ app.get("/api/meta", requireAuth, async (req, res) => {
 
 app.get("/api/transactions", requireAuth, async (req, res) => {
   try {
-    const pool = await getPool();
-    const request = pool.request();
+    const result = req.user.role === "admin"
+      ? await query(
+          `
+          SELECT
+            t.transaction_code AS "GiaoDich_ID",
+            t.title AS "Ten_giao_dich",
+            t.amount AS "So_tien",
+            t.transaction_date AS "Ngay_giao_dich",
+            t.note AS "Ghi_chu",
+            t.user_code AS "ID_nguoi_dung",
+            c.category_name AS "Ten_danh_muc",
+            w.wallet_name AS "Ten_vi"
+          FROM transactions t
+          JOIN categories c ON c.category_code = t.category_code
+          JOIN wallets w ON w.wallet_code = t.wallet_code
+          ORDER BY t.transaction_date DESC, t.id DESC
+          LIMIT 100
+          `
+        )
+      : await query(
+          `
+          SELECT
+            t.transaction_code AS "GiaoDich_ID",
+            t.title AS "Ten_giao_dich",
+            t.amount AS "So_tien",
+            t.transaction_date AS "Ngay_giao_dich",
+            t.note AS "Ghi_chu",
+            t.user_code AS "ID_nguoi_dung",
+            c.category_name AS "Ten_danh_muc",
+            w.wallet_name AS "Ten_vi"
+          FROM transactions t
+          JOIN categories c ON c.category_code = t.category_code
+          JOIN wallets w ON w.wallet_code = t.wallet_code
+          WHERE t.user_code = $1
+          ORDER BY t.transaction_date DESC, t.id DESC
+          LIMIT 100
+          `,
+          [req.user.userId]
+        );
 
-    let query = `
-      SELECT TOP 100
-        GD.GiaoDich_ID,
-        GD.Ten_giao_dich,
-        GD.So_tien,
-        GD.Ngay_giao_dich,
-        GD.Ghi_chu,
-        GD.ID_nguoi_dung,
-        DM.Ten_danh_muc,
-        VT.Ten_vi
-      FROM GiaoDich GD
-      JOIN DanhMuc DM ON GD.ID_danh_muc = DM.DanhMuc_ID
-      JOIN ViTien VT ON GD.ID_vi_tien = VT.Vi_ID
-    `;
-
-    if (req.user.role !== "admin") {
-      request.input("userId", sql.VarChar(10), req.user.userId);
-      query += " WHERE GD.ID_nguoi_dung = @userId";
-    }
-
-    query += " ORDER BY GD.Ngay_giao_dich DESC, GD.GiaoDich_ID DESC";
-
-    const result = await request.query(query);
-    return res.json(result.recordset);
+    return res.json(result.rows);
   } catch (err) {
     return res.status(500).json({ message: "Loi lay giao dich", error: err.message });
   }
@@ -184,33 +204,24 @@ app.post("/api/transactions", requireAuth, async (req, res) => {
   const ownerId = req.user.role === "admin" && idNguoiDung ? idNguoiDung : req.user.userId;
 
   try {
-    const pool = await getPool();
-
     if (req.user.role !== "admin") {
-      const walletCheck = await pool
-        .request()
-        .input("idVi", sql.VarChar(10), idVi)
-        .input("userId", sql.VarChar(10), req.user.userId)
-        .query("SELECT 1 AS ok FROM ViTien WHERE Vi_ID = @idVi AND ID_nguoi_dung = @userId");
+      const walletCheck = await query(
+        "SELECT 1 AS ok FROM wallets WHERE wallet_code = $1 AND user_code = $2",
+        [idVi, req.user.userId]
+      );
 
-      if (walletCheck.recordset.length === 0) {
+      if (walletCheck.rows.length === 0) {
         return res.status(403).json({ message: "Vi khong thuoc tai khoan cua ban" });
       }
     }
 
-    await pool
-      .request()
-      .input("tenGiaoDich", sql.VarChar(100), tenGiaoDich)
-      .input("soTien", sql.Decimal(19, 2), Number(soTien))
-      .input("ngayGiaoDich", sql.Date, ngayGiaoDich)
-      .input("ghiChu", sql.VarChar(255), ghiChu || null)
-      .input("idNguoiDung", sql.VarChar(10), ownerId)
-      .input("idDanhMuc", sql.VarChar(10), idDanhMuc)
-      .input("idVi", sql.VarChar(10), idVi)
-      .query(`
-        INSERT INTO GiaoDich (Ten_giao_dich, So_tien, Ngay_giao_dich, Ghi_chu, ID_nguoi_dung, ID_danh_muc, ID_vi_tien)
-        VALUES (@tenGiaoDich, @soTien, @ngayGiaoDich, @ghiChu, @idNguoiDung, @idDanhMuc, @idVi)
-      `);
+    await query(
+      `
+      INSERT INTO transactions (title, amount, transaction_date, note, user_code, category_code, wallet_code)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `,
+      [tenGiaoDich, Number(soTien), ngayGiaoDich, ghiChu || null, ownerId, idDanhMuc, idVi]
+    );
 
     return res.status(201).json({ message: "Them giao dich thanh cong" });
   } catch (err) {
@@ -220,11 +231,19 @@ app.post("/api/transactions", requireAuth, async (req, res) => {
 
 app.get("/api/admin/users", requireAuth, requireAdmin, async (_req, res) => {
   try {
-    const pool = await getPool();
-    const result = await pool
-      .request()
-      .query("SELECT NguoiDung_ID, Ten_TK, Email, Vai_tro, Ngay_tao FROM NguoiDung ORDER BY NguoiDung_ID");
-    return res.json(result.recordset);
+    const result = await query(
+      `
+      SELECT
+        user_code AS "NguoiDung_ID",
+        username AS "Ten_TK",
+        email AS "Email",
+        role AS "Vai_tro",
+        created_at::date AS "Ngay_tao"
+      FROM app_users
+      ORDER BY user_code
+      `
+    );
+    return res.json(result.rows);
   } catch (err) {
     return res.status(500).json({ message: "Loi lay danh sach user", error: err.message });
   }
@@ -242,17 +261,10 @@ app.post("/api/admin/users", requireAuth, requireAdmin, async (req, res) => {
   }
 
   try {
-    const pool = await getPool();
-    await pool
-      .request()
-      .input("tenTaiKhoan", sql.VarChar(100), tenTaiKhoan)
-      .input("email", sql.VarChar(100), email)
-      .input("matKhau", sql.VarChar(255), matKhau)
-      .input("vaiTro", sql.VarChar(20), vaiTro)
-      .query(`
-        INSERT INTO NguoiDung (Ten_TK, Email, Mat_khau, Vai_tro)
-        VALUES (@tenTaiKhoan, @email, @matKhau, @vaiTro)
-      `);
+    await query(
+      "INSERT INTO app_users (username, email, password, role) VALUES ($1, $2, $3, $4)",
+      [tenTaiKhoan, email, matKhau, vaiTro]
+    );
 
     return res.status(201).json({ message: "Tao user thanh cong" });
   } catch (err) {
@@ -269,20 +281,12 @@ app.put("/api/admin/users/:id", requireAuth, requireAdmin, async (req, res) => {
   }
 
   try {
-    const pool = await getPool();
-    const result = await pool
-      .request()
-      .input("id", sql.VarChar(10), id)
-      .input("email", sql.VarChar(100), email)
-      .input("matKhau", sql.VarChar(255), matKhau)
-      .input("vaiTro", sql.VarChar(20), vaiTro)
-      .query(`
-        UPDATE NguoiDung
-        SET Email = @email, Mat_khau = @matKhau, Vai_tro = @vaiTro
-        WHERE NguoiDung_ID = @id
-      `);
+    const result = await query(
+      "UPDATE app_users SET email = $1, password = $2, role = $3 WHERE user_code = $4",
+      [email, matKhau, vaiTro, id]
+    );
 
-    if (result.rowsAffected[0] === 0) {
+    if (result.rowCount === 0) {
       return res.status(404).json({ message: "Khong tim thay user" });
     }
 
@@ -296,13 +300,9 @@ app.delete("/api/admin/users/:id", requireAuth, requireAdmin, async (req, res) =
   const { id } = req.params;
 
   try {
-    const pool = await getPool();
-    const result = await pool
-      .request()
-      .input("id", sql.VarChar(10), id)
-      .query("DELETE FROM NguoiDung WHERE NguoiDung_ID = @id");
+    const result = await query("DELETE FROM app_users WHERE user_code = $1", [id]);
 
-    if (result.rowsAffected[0] === 0) {
+    if (result.rowCount === 0) {
       return res.status(404).json({ message: "Khong tim thay user" });
     }
 
