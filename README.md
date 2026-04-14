@@ -5,8 +5,8 @@ Repo nay da duoc chuyen doi FULL tu SQL Server sang Supabase PostgreSQL, giu day
 ## Kien truc
 
 - `index.html`: redirect den giao dien app.
-- `app/frontend`: giao dien dang nhap, dashboard, giao dich, admin CRUD user.
-- `app/backend`: Express API + JWT + PostgreSQL (`pg`).
+- `app/frontend`: giao dien dang nhap, dashboard, giao dich, admin CRUD user, goi truc tiep Supabase client.
+- `app/backend`: co san, nhung khong bat buoc cho che do frontend-only.
 - `supabase/schema.sql`: script FULL conversion tu SQL goc.
 - `render.yaml`: blueprint deploy backend len Render.
 
@@ -38,25 +38,25 @@ Tai khoan demo:
 - Admin: `lethanh` / `thanh456`
 - User: `nguyenhoang` / `hoang123`
 
-## 2) Deploy backend API
+## 2) Cau hinh frontend goi truc tiep Supabase
 
-1. Push repo len GitHub.
-2. Render -> `New` -> `Blueprint` -> chon repo.
-3. Set env vars:
-
-- `JWT_SECRET`
-- `DATABASE_URL` (Supabase Postgres pooler URL)
-- `DB_SSL=true`
-- `CORS_ORIGIN=https://<username>.github.io`
-
-4. Deploy, nhan API URL backend.
-
-## 3) Chay frontend tren GitHub Pages
-
-1. Bat Pages cho repo (branch `main`, root).
+1. Bat GitHub Pages cho repo (branch `main`, root).
 2. Mo `https://<username>.github.io/<repo>/`.
-3. O login, nhap `API URL` la URL backend vua deploy.
-4. Dang nhap va su dung.
+3. O form login, nhap:
+
+- `Supabase URL`
+- `Supabase Publishable Key`
+
+4. Dang nhap bang bang `nguoidung`:
+
+- Admin: `lethanh` / `thanh456`
+- User: `nguyenhoang` / `hoang123`
+
+## 3) Luu y bao mat
+
+- `supabase/schema.sql` hien tai bat quyen demo de frontend-only hoat dong voi bang user rieng.
+- Khong dung che do nay cho production.
+- Neu deploy that, nen quay lai model co backend hoac su dung Supabase Auth + RLS chuan.
 
 ## Local (tuy chon)
 

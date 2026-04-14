@@ -538,4 +538,26 @@ BEGIN
 END;
 $$;
 
+-- ================================================================
+-- DEMO MODE FOR FRONTEND-ONLY WITH CUSTOM USER TABLE
+-- ================================================================
+-- Warning: This is intentionally permissive for demo purposes.
+-- Do NOT use this policy set in production.
+
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO anon, authenticated;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
+
+ALTER TABLE nguoidung DISABLE ROW LEVEL SECURITY;
+ALTER TABLE nguoidung_sdt DISABLE ROW LEVEL SECURITY;
+ALTER TABLE vitien DISABLE ROW LEVEL SECURITY;
+ALTER TABLE danhmuc DISABLE ROW LEVEL SECURITY;
+ALTER TABLE chitieu DISABLE ROW LEVEL SECURITY;
+ALTER TABLE thunhap DISABLE ROW LEVEL SECURITY;
+ALTER TABLE taichinhdaihan DISABLE ROW LEVEL SECURITY;
+ALTER TABLE giaodich DISABLE ROW LEVEL SECURITY;
+ALTER TABLE ngansach DISABLE ROW LEVEL SECURITY;
+ALTER TABLE muctieutaichinh DISABLE ROW LEVEL SECURITY;
+ALTER TABLE baocaotaichinh DISABLE ROW LEVEL SECURITY;
+
 COMMIT;

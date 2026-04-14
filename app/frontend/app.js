@@ -1,11 +1,9 @@
 const state = {
-  token: null,
   user: null,
   categories: [],
-  wallets: []
+  wallets: [],
+  supabase: null
 };
-
-let apiBase = localStorage.getItem("apiBase") || "";
 
 const loginCard = document.getElementById("loginCard");
 const appPanel = document.getElementById("appPanel");
@@ -27,43 +25,37 @@ const adminSection = document.getElementById("adminSection");
 
 const txCategory = document.getElementById("txCategory");
 const txWallet = document.getElementById("txWallet");
-const apiBaseInput = document.getElementById("apiBase");
 
-if (apiBaseInput) {
-  apiBaseInput.value = apiBase;
-}
+const supabaseUrlInput = document.getElementById("supabaseUrl");
+const supabaseKeyInput = document.getElementById("supabaseKey");
+
+supabaseUrlInput.value = localStorage.getItem("supabaseUrl") || "";
+supabaseKeyInput.value = localStorage.getItem("supabaseKey") || "";
 
 function setMessage(target, text, isError = true) {
   target.textContent = text || "";
   target.style.color = isError ? "#b64635" : "#0b7a3d";
 }
 
-async function api(path, options = {}) {
-  const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
-  if (state.token) {
-    headers.Authorization = `Bearer ${state.token}`;
+function makeClient() {
+  const url = supabaseUrlInput.value.trim();
+  const key = supabaseKeyInput.value.trim();
+
+  if (!url || !key) {
+    throw new Error("Can nhap Supabase URL va Publishable Key");
   }
 
-  const normalizedBase = apiBase.trim().replace(/\/$/, "");
-  const url = normalizedBase ? `${normalizedBase}${path}` : path;
+  localStorage.setItem("supabaseUrl", url);
+  localStorage.setItem("supabaseKey", key);
 
-  const response = await fetch(url, { ...options, headers });
-  const data = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    throw new Error(data.message || "Loi API");
-  }
-
-  return data;
+  state.supabase = window.supabase.createClient(url, key);
 }
 
-function renderMetrics(data) {
-  const entries = Object.entries(data.metrics || {});
+function renderMetrics(metricsData) {
+  const entries = Object.entries(metricsData || {});
   metrics.innerHTML = entries
     .map(([k, v]) => {
-      const label = k
-        .replace(/([A-Z])/g, " $1")
-        .replace(/^./, c => c.toUpperCase());
+      const label = k.replace(/([A-Z])/g, " $1").replace(/^./, c => c.toUpperCase());
       return `<div class="metric"><div class="label">${label}</div><div class="value">${Number(v).toLocaleString("vi-VN")}</div></div>`;
     })
     .join("");
@@ -73,11 +65,11 @@ function renderTransactions(rows) {
   txTable.innerHTML = rows
     .map(r => `
       <tr>
-        <td>${r.GiaoDich_ID}</td>
-        <td>${r.Ten_giao_dich}</td>
-        <td>${Number(r.So_tien).toLocaleString("vi-VN")}</td>
-        <td>${String(r.Ngay_giao_dich).slice(0, 10)}</td>
-        <td>${r.ID_nguoi_dung}</td>
+        <td>${r.giaodich_id}</td>
+        <td>${r.ten_giao_dich}</td>
+        <td>${Number(r.so_tien).toLocaleString("vi-VN")}</td>
+        <td>${String(r.ngay_giao_dich).slice(0, 10)}</td>
+        <td>${r.id_nguoi_dung}</td>
       </tr>
     `)
     .join("");
@@ -85,57 +77,127 @@ function renderTransactions(rows) {
 
 function renderUserRows(rows) {
   userTable.innerHTML = rows
-    .map(
-      r => `
+    .map(r => `
       <tr>
-        <td>${r.NguoiDung_ID}</td>
-        <td>${r.Ten_TK}</td>
-        <td><input id="email-${r.NguoiDung_ID}" value="${r.Email || ""}"></td>
+        <td>${r.nguoidung_id}</td>
+        <td>${r.ten_tk}</td>
+        <td><input id="email-${r.nguoidung_id}" value="${r.email || ""}"></td>
         <td>
-          <select id="role-${r.NguoiDung_ID}">
-            <option value="user" ${r.Vai_tro === "user" ? "selected" : ""}>user</option>
-            <option value="admin" ${r.Vai_tro === "admin" ? "selected" : ""}>admin</option>
+          <select id="role-${r.nguoidung_id}">
+            <option value="user" ${r.vai_tro === "user" ? "selected" : ""}>user</option>
+            <option value="admin" ${r.vai_tro === "admin" ? "selected" : ""}>admin</option>
           </select>
         </td>
         <td>
-          <button class="action-btn btn-edit" onclick="updateUser('${r.NguoiDung_ID}')">Sua</button>
-          <button class="action-btn btn-delete" onclick="deleteUser('${r.NguoiDung_ID}')">Xoa</button>
+          <button class="action-btn btn-edit" onclick="updateUser('${r.nguoidung_id}')">Sua</button>
+          <button class="action-btn btn-delete" onclick="deleteUser('${r.nguoidung_id}')">Xoa</button>
         </td>
       </tr>
-    `
-    )
+    `)
     .join("");
 }
 
 function fillOptions() {
   txCategory.innerHTML = state.categories
-    .map(c => `<option value="${c.DanhMuc_ID}">${c.DanhMuc_ID} - ${c.Ten_danh_muc}</option>`)
+    .map(c => `<option value="${c.danhmuc_id}">${c.danhmuc_id} - ${c.ten_danh_muc}</option>`)
     .join("");
 
   txWallet.innerHTML = state.wallets
-    .map(w => `<option value="${w.Vi_ID}">${w.Vi_ID} - ${w.Ten_vi} (${w.ID_nguoi_dung})</option>`)
+    .map(w => `<option value="${w.vi_id}">${w.vi_id} - ${w.ten_vi} (${w.id_nguoi_dung})</option>`)
     .join("");
 }
 
 async function refreshData() {
-  const [dash, meta, txs] = await Promise.all([
-    api("/api/dashboard"),
-    api("/api/meta"),
-    api("/api/transactions")
+  const sb = state.supabase;
+
+  const [{ data: categories, error: cErr }, { data: wallets, error: wErr }] = await Promise.all([
+    sb.from("danhmuc").select("danhmuc_id,ten_danh_muc").order("danhmuc_id"),
+    state.user.vai_tro === "admin"
+      ? sb.from("vitien").select("vi_id,ten_vi,id_nguoi_dung").order("vi_id")
+      : sb.from("vitien").select("vi_id,ten_vi,id_nguoi_dung").eq("id_nguoi_dung", state.user.nguoidung_id).order("vi_id")
   ]);
 
-  renderMetrics(dash);
-  state.categories = meta.categories || [];
-  state.wallets = meta.wallets || [];
-  fillOptions();
-  renderTransactions(txs);
+  if (cErr || wErr) {
+    throw new Error(cErr?.message || wErr?.message || "Loi tai meta");
+  }
 
-  if (state.user.role === "admin") {
+  state.categories = categories || [];
+  state.wallets = wallets || [];
+  fillOptions();
+
+  const txQuery = sb
+    .from("giaodich")
+    .select("giaodich_id,ten_giao_dich,so_tien,ngay_giao_dich,id_nguoi_dung")
+    .order("ngay_giao_dich", { ascending: false })
+    .limit(100);
+
+  const { data: txs, error: txErr } = state.user.vai_tro === "admin"
+    ? await txQuery
+    : await txQuery.eq("id_nguoi_dung", state.user.nguoidung_id);
+
+  if (txErr) {
+    throw new Error(txErr.message);
+  }
+
+  renderTransactions(txs || []);
+
+  const { data: summaryRows, error: sErr } = await sb
+    .from("giaodich")
+    .select("so_tien,id_danh_muc")
+    .eq("id_nguoi_dung", state.user.nguoidung_id);
+
+  if (sErr) {
+    throw new Error(sErr.message);
+  }
+
+  const incomeRows = await sb.from("thunhap").select("thunhap_id");
+  if (incomeRows.error) {
+    throw new Error(incomeRows.error.message);
+  }
+
+  const incomeSet = new Set((incomeRows.data || []).map(x => x.thunhap_id));
+
+  let totalIncome = 0;
+  let totalExpense = 0;
+  for (const row of summaryRows || []) {
+    if (incomeSet.has(row.id_danh_muc)) {
+      totalIncome += Number(row.so_tien || 0);
+    } else {
+      totalExpense += Number(row.so_tien || 0);
+    }
+  }
+
+  if (state.user.vai_tro === "admin") {
+    const [{ count: userCount }, { count: walletCount }, { count: txCount }] = await Promise.all([
+      sb.from("nguoidung").select("nguoidung_id", { count: "exact", head: true }),
+      sb.from("vitien").select("vi_id", { count: "exact", head: true }),
+      sb.from("giaodich").select("giaodich_id", { count: "exact", head: true })
+    ]);
+
+    renderMetrics({
+      totalUsers: userCount || 0,
+      totalWallets: walletCount || 0,
+      totalTransactions: txCount || 0
+    });
+
     adminSection.classList.remove("hidden");
-    const users = await api("/api/admin/users");
-    renderUserRows(users);
+    const { data: users, error: uErr } = await sb
+      .from("nguoidung")
+      .select("nguoidung_id,ten_tk,email,vai_tro,ngay_tao")
+      .order("nguoidung_id");
+
+    if (uErr) {
+      throw new Error(uErr.message);
+    }
+
+    renderUserRows(users || []);
   } else {
     adminSection.classList.add("hidden");
+    renderMetrics({
+      totalIncome,
+      totalExpense,
+      balance: totalIncome - totalExpense
+    });
   }
 }
 
@@ -143,23 +205,31 @@ loginForm.addEventListener("submit", async e => {
   e.preventDefault();
   setMessage(loginMessage, "");
 
-  const username = document.getElementById("username").value.trim();
-  const password = document.getElementById("password").value;
-
-  apiBase = (apiBaseInput?.value || "").trim();
-  localStorage.setItem("apiBase", apiBase);
-
   try {
-    const data = await api("/api/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ username, password })
-    });
+    makeClient();
 
-    state.token = data.token;
-    state.user = data.user;
+    const username = document.getElementById("username").value.trim();
+    const password = document.getElementById("password").value;
 
-    welcome.textContent = `Xin chao, ${state.user.username}`;
-    roleBadge.textContent = `Role: ${state.user.role}`;
+    const { data, error } = await state.supabase
+      .from("nguoidung")
+      .select("nguoidung_id,ten_tk,email,vai_tro")
+      .eq("ten_tk", username)
+      .eq("mat_khau", password)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    if (!data) {
+      throw new Error("Sai tai khoan hoac mat khau");
+    }
+
+    state.user = data;
+
+    welcome.textContent = `Xin chao, ${state.user.ten_tk}`;
+    roleBadge.textContent = `Role: ${state.user.vai_tro}`;
 
     loginCard.classList.add("hidden");
     appPanel.classList.remove("hidden");
@@ -175,16 +245,23 @@ txForm.addEventListener("submit", async e => {
   setMessage(txMessage, "");
 
   const payload = {
-    tenGiaoDich: document.getElementById("txName").value.trim(),
-    soTien: Number(document.getElementById("txAmount").value),
-    ngayGiaoDich: document.getElementById("txDate").value,
-    idDanhMuc: txCategory.value,
-    idVi: txWallet.value,
-    ghiChu: document.getElementById("txNote").value.trim()
+    ten_giao_dich: document.getElementById("txName").value.trim(),
+    so_tien: Number(document.getElementById("txAmount").value),
+    ngay_giao_dich: document.getElementById("txDate").value,
+    id_danh_muc: txCategory.value,
+    id_vi_tien: txWallet.value,
+    ghi_chu: document.getElementById("txNote").value.trim() || null,
+    id_nguoi_dung: state.user.vai_tro === "admin"
+      ? (state.wallets.find(x => x.vi_id === txWallet.value)?.id_nguoi_dung || state.user.nguoidung_id)
+      : state.user.nguoidung_id
   };
 
   try {
-    await api("/api/transactions", { method: "POST", body: JSON.stringify(payload) });
+    const { error } = await state.supabase.from("giaodich").insert([payload]);
+    if (error) {
+      throw new Error(error.message);
+    }
+
     setMessage(txMessage, "Them giao dich thanh cong", false);
     txForm.reset();
     await refreshData();
@@ -197,26 +274,33 @@ userCreateForm.addEventListener("submit", async e => {
   e.preventDefault();
   setMessage(adminMessage, "");
 
+  if (state.user?.vai_tro !== "admin") {
+    setMessage(adminMessage, "Chi admin moi tao duoc user", true);
+    return;
+  }
+
   const payload = {
-    tenTaiKhoan: document.getElementById("newUsername").value.trim(),
+    ten_tk: document.getElementById("newUsername").value.trim(),
     email: document.getElementById("newEmail").value.trim(),
-    matKhau: document.getElementById("newPassword").value,
-    vaiTro: document.getElementById("newRole").value
+    mat_khau: document.getElementById("newPassword").value,
+    vai_tro: document.getElementById("newRole").value
   };
 
   try {
-    await api("/api/admin/users", { method: "POST", body: JSON.stringify(payload) });
+    const { error } = await state.supabase.from("nguoidung").insert([payload]);
+    if (error) {
+      throw new Error(error.message);
+    }
+
     setMessage(adminMessage, "Tao user thanh cong", false);
     userCreateForm.reset();
-    const users = await api("/api/admin/users");
-    renderUserRows(users);
+    await refreshData();
   } catch (err) {
     setMessage(adminMessage, err.message, true);
   }
 });
 
 logoutBtn.addEventListener("click", () => {
-  state.token = null;
   state.user = null;
   appPanel.classList.add("hidden");
   loginCard.classList.remove("hidden");
@@ -235,13 +319,17 @@ window.updateUser = async function updateUser(id) {
   }
 
   try {
-    await api(`/api/admin/users/${id}`, {
-      method: "PUT",
-      body: JSON.stringify({ email, vaiTro, matKhau })
-    });
+    const { error } = await state.supabase
+      .from("nguoidung")
+      .update({ email, mat_khau: matKhau, vai_tro: vaiTro })
+      .eq("nguoidung_id", id);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
     setMessage(adminMessage, `Cap nhat user ${id} thanh cong`, false);
-    const users = await api("/api/admin/users");
-    renderUserRows(users);
+    await refreshData();
   } catch (err) {
     setMessage(adminMessage, err.message, true);
   }
@@ -253,10 +341,13 @@ window.deleteUser = async function deleteUser(id) {
   }
 
   try {
-    await api(`/api/admin/users/${id}`, { method: "DELETE" });
+    const { error } = await state.supabase.from("nguoidung").delete().eq("nguoidung_id", id);
+    if (error) {
+      throw new Error(error.message);
+    }
+
     setMessage(adminMessage, `Xoa user ${id} thanh cong`, false);
-    const users = await api("/api/admin/users");
-    renderUserRows(users);
+    await refreshData();
   } catch (err) {
     setMessage(adminMessage, err.message, true);
   }
