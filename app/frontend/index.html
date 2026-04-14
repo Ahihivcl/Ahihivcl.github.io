@@ -11,22 +11,7 @@
 </head>
 <body>
   <main class="shell">
-    <section id="configCard" class="card login-card">
-      <h1>Cau hinh Supabase</h1>
-      <p>Nhap Project URL va Publishable key de bat dau.</p>
-      <form id="configForm">
-        <label for="supabaseUrl">Project URL</label>
-        <input id="supabaseUrl" name="supabaseUrl" placeholder="https://xxxx.supabase.co" required>
-
-        <label for="supabaseKey">Publishable key</label>
-        <input id="supabaseKey" name="supabaseKey" placeholder="sb_publishable_..." required>
-
-        <button type="submit">Luu cau hinh</button>
-      </form>
-      <p id="configMessage" class="message"></p>
-    </section>
-
-    <section id="authCard" class="card login-card hidden">
+    <section id="authCard" class="card login-card">
       <h2>Dang nhap Supabase</h2>
       <p>Dung email/password da tao trong Authentication.</p>
       <form id="loginForm">
@@ -49,12 +34,9 @@
           <p id="roleBadge" class="badge">Role: user</p>
         </div>
         <div class="top-actions">
-          <button id="changeConfigBtn" class="outline" type="button">Doi key</button>
           <button id="logoutBtn" class="outline" type="button">Dang xuat</button>
         </div>
       </header>
-
-      <section class="metrics" id="metrics"></section>
 
       <section class="grid">
         <article class="box">

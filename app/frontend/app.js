@@ -7,11 +7,12 @@ const state = {
   transactions: []
 };
 
-const configCard = document.getElementById("configCard");
+const SUPABASE_URL = "https://dhfnyufxzlytrkadinpn.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_NXcJo9m1MMnlV6iO7KDHFA_E4YVGhD5";
+
 const authCard = document.getElementById("authCard");
 const appPanel = document.getElementById("appPanel");
 
-const configForm = document.getElementById("configForm");
 const loginForm = document.getElementById("loginForm");
 const txForm = document.getElementById("txForm");
 const walletForm = document.getElementById("walletForm");
@@ -19,32 +20,16 @@ const categoryForm = document.getElementById("categoryForm");
 
 const signupBtn = document.getElementById("signupBtn");
 const logoutBtn = document.getElementById("logoutBtn");
-const changeConfigBtn = document.getElementById("changeConfigBtn");
 
-const configMessage = document.getElementById("configMessage");
 const authMessage = document.getElementById("authMessage");
 const appMessage = document.getElementById("appMessage");
 
 const welcome = document.getElementById("welcome");
 const roleBadge = document.getElementById("roleBadge");
-const metrics = document.getElementById("metrics");
 const txTable = document.getElementById("txTable");
 
 const txCategory = document.getElementById("txCategory");
 const txWallet = document.getElementById("txWallet");
-
-const supabaseUrlInput = document.getElementById("supabaseUrl");
-const supabaseKeyInput = document.getElementById("supabaseKey");
-
-const savedUrl = localStorage.getItem("supabaseUrl") || "";
-const savedKey = localStorage.getItem("supabaseKey") || "";
-
-if (savedUrl) {
-  supabaseUrlInput.value = savedUrl;
-}
-if (savedKey) {
-  supabaseKeyInput.value = savedKey;
-}
 
 function setMessage(target, text, isError = true) {
   target.textContent = text || "";
@@ -52,13 +37,12 @@ function setMessage(target, text, isError = true) {
 }
 
 function setView(mode) {
-  configCard.classList.toggle("hidden", mode !== "config");
   authCard.classList.toggle("hidden", mode !== "auth");
   appPanel.classList.toggle("hidden", mode !== "app");
 }
 
-function initClient(url, key) {
-  state.supabase = window.supabase.createClient(url, key);
+function initClient() {
+  state.supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 }
 
 async function getProfile(userId) {
@@ -73,36 +57,6 @@ async function getProfile(userId) {
   }
 
   state.profile = data || { id: userId, username: "user", role: "user" };
-}
-
-function renderMetrics() {
-  const txs = state.transactions;
-  const income = txs
-    .filter(tx => {
-      const cat = state.categories.find(c => c.id === tx.category_id);
-      return cat && cat.kind === "income";
-    })
-    .reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
-
-  const expense = txs
-    .filter(tx => {
-      const cat = state.categories.find(c => c.id === tx.category_id);
-      return cat && cat.kind !== "income";
-    })
-    .reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
-
-  const balance = income - expense;
-
-  const items = [
-    { label: "Tong giao dich", value: txs.length },
-    { label: "Tong thu", value: income.toLocaleString("vi-VN") },
-    { label: "Tong chi", value: expense.toLocaleString("vi-VN") },
-    { label: "So du tam tinh", value: balance.toLocaleString("vi-VN") }
-  ];
-
-  metrics.innerHTML = items
-    .map(item => `<div class="metric"><div class="label">${item.label}</div><div class="value">${item.value}</div></div>`)
-    .join("");
 }
 
 function fillOptions() {
@@ -171,7 +125,6 @@ async function refreshData() {
 
   fillOptions();
   renderTransactions();
-  renderMetrics();
 }
 
 async function bootstrapSession() {
@@ -190,33 +143,6 @@ async function bootstrapSession() {
   setView("app");
   await refreshData();
 }
-
-configForm.addEventListener("submit", async event => {
-  event.preventDefault();
-  setMessage(configMessage, "");
-
-  const url = supabaseUrlInput.value.trim();
-  const key = supabaseKeyInput.value.trim();
-
-  if (!url || !key) {
-    setMessage(configMessage, "Can nhap du URL va key", true);
-    return;
-  }
-
-  localStorage.setItem("supabaseUrl", url);
-  localStorage.setItem("supabaseKey", key);
-
-  try {
-    initClient(url, key);
-    await bootstrapSession();
-    if (!state.session) {
-      setView("auth");
-      setMessage(configMessage, "Da luu cau hinh", false);
-    }
-  } catch (err) {
-    setMessage(configMessage, err.message || "Cau hinh Supabase khong hop le", true);
-  }
-});
 
 loginForm.addEventListener("submit", async event => {
   event.preventDefault();
@@ -268,15 +194,6 @@ logoutBtn.addEventListener("click", async () => {
   state.categories = [];
   state.transactions = [];
   setView("auth");
-});
-
-changeConfigBtn.addEventListener("click", async () => {
-  if (state.supabase) {
-    await state.supabase.auth.signOut();
-  }
-  state.session = null;
-  state.profile = null;
-  setView("config");
 });
 
 walletForm.addEventListener("submit", async event => {
@@ -367,19 +284,14 @@ txForm.addEventListener("submit", async event => {
 });
 
 window.addEventListener("load", async () => {
-  if (savedUrl && savedKey) {
-    try {
-      initClient(savedUrl, savedKey);
-      await bootstrapSession();
-      if (!state.session) {
-        setView("auth");
-      }
-      return;
-    } catch (_err) {
-      setView("config");
-      return;
+  try {
+    initClient();
+    await bootstrapSession();
+    if (!state.session) {
+      setView("auth");
     }
+  } catch (_err) {
+    setMessage(authMessage, "Khong ket noi duoc Supabase. Kiem tra URL/key trong app.js", true);
+    setView("auth");
   }
-
-  setView("config");
 });
