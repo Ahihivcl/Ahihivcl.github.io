@@ -6,8 +6,7 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "node src/server.js",
-    "sync-auth-users": "node scripts/syncAuthUsers.js"
+    "dev": "node src/server.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.8",

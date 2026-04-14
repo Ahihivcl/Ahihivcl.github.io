@@ -73,11 +73,16 @@ function initClient() {
   state.supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 }
 
-async function ensureNguoiDungRecord(userId) {
+async function ensureNguoiDungRecordByEmail(email) {
+  const normalizedEmail = String(email || "").trim().toLowerCase();
+  if (!normalizedEmail) {
+    throw new Error("Missing email from Supabase session.");
+  }
+
   const existing = await state.supabase
     .from("nguoidung")
     .select("nguoidung_id, ten_tk, email, vai_tro")
-    .eq("auth_user_id", userId)
+    .eq("email", normalizedEmail)
     .single();
 
   if (!existing.error && existing.data) {
@@ -90,46 +95,15 @@ async function ensureNguoiDungRecord(userId) {
     throw existing.error;
   }
 
-  const email = state.session.user.email || "";
-
-  const byEmail = await state.supabase
-    .from("nguoidung")
-    .select("nguoidung_id, ten_tk, email, vai_tro")
-    .eq("email", email)
-    .is("auth_user_id", null)
-    .single();
-
-  if (!byEmail.error && byEmail.data) {
-    const linkResult = await state.supabase
-      .from("nguoidung")
-      .update({ auth_user_id: userId })
-      .eq("nguoidung_id", byEmail.data.nguoidung_id)
-      .select("nguoidung_id, ten_tk, email, vai_tro")
-      .single();
-
-    if (linkResult.error) {
-      throw linkResult.error;
-    }
-
-    state.profile = linkResult.data;
-    state.nguoiDungId = linkResult.data.nguoidung_id;
-    return;
-  }
-
-  if (byEmail.error && byEmail.error.code !== "PGRST116") {
-    throw byEmail.error;
-  }
-
-  const username = (email.split("@")[0] || "user").toLowerCase();
+  const username = (normalizedEmail.split("@")[0] || "user").toLowerCase();
 
   const created = await state.supabase
     .from("nguoidung")
     .insert({
       ten_tk: username,
-      email,
+      email: normalizedEmail,
       mat_khau: "[supabase-auth]",
-      vai_tro: "user",
-      auth_user_id: userId
+      vai_tro: "user"
     })
     .select("nguoidung_id, ten_tk, email, vai_tro")
     .single();
@@ -217,7 +191,7 @@ async function bootstrapSession() {
   }
 
   state.session = data.session;
-  await ensureNguoiDungRecord(state.session.user.id);
+  await ensureNguoiDungRecordByEmail(state.session.user.email);
 
   welcome.textContent = `Xin chao, ${state.profile.ten_tk || state.session.user.email}`;
   roleBadge.textContent = `Role: ${state.profile.vai_tro || "user"}`;
@@ -241,7 +215,7 @@ loginForm.addEventListener("submit", async event => {
   }
 
   state.session = data.session;
-  await ensureNguoiDungRecord(state.session.user.id);
+  await ensureNguoiDungRecordByEmail(state.session.user.email);
 
   welcome.textContent = `Xin chao, ${state.profile.ten_tk || state.session.user.email}`;
   roleBadge.textContent = `Role: ${state.profile.vai_tro || "user"}`;

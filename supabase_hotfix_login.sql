@@ -11,44 +11,23 @@ BEGIN
   END IF;
 END $$;
 
--- 1) Ensure auth_user_id column exists
-ALTER TABLE public.nguoidung
-  ADD COLUMN IF NOT EXISTS auth_user_id uuid;
+-- 1) No auth_user_id dependency anymore.
+-- Keep the column if it already exists, but do not rely on it.
 
--- 2) Ensure uniqueness constraints for auth mapping
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM pg_constraint
-    WHERE conname = 'nguoidung_auth_user_id_key'
-      AND conrelid = 'public.nguoidung'::regclass
-  ) THEN
-    ALTER TABLE public.nguoidung
-      ADD CONSTRAINT nguoidung_auth_user_id_key UNIQUE (auth_user_id);
-  END IF;
-END $$;
-
--- 3) Link existing rows by email first
+-- 2) Normalize/canonicalize existing rows by email if needed
 UPDATE public.nguoidung n
-SET auth_user_id = u.id
-FROM auth.users u
-WHERE n.auth_user_id IS NULL
-  AND lower(n.email) = lower(u.email);
+SET ten_tk = COALESCE(NULLIF(n.ten_tk, ''), lower(split_part(n.email, '@', 1)))
+WHERE n.ten_tk IS NULL OR n.ten_tk = '';
 
--- 4) Backfill missing rows from auth.users (safe)
-INSERT INTO public.nguoidung (ten_tk, email, mat_khau, vai_tro, auth_user_id)
+INSERT INTO public.nguoidung (ten_tk, email, mat_khau, vai_tro)
 SELECT
-  left(lower(split_part(u.email, '@', 1)) || '_' || substring(replace(u.id::text, '-', '') from 1 for 6), 100),
+  left(lower(split_part(u.email, '@', 1)), 100),
   u.email,
   '[supabase-auth]',
-  'user',
-  u.id
+  'user'
 FROM auth.users u
-LEFT JOIN public.nguoidung n_auth ON n_auth.auth_user_id = u.id
 LEFT JOIN public.nguoidung n_email ON lower(n_email.email) = lower(u.email)
-WHERE n_auth.auth_user_id IS NULL
-  AND n_email.email IS NULL;
+WHERE n_email.email IS NULL;
 
 -- 5) API grants for authenticated users
 GRANT USAGE ON SCHEMA public TO authenticated;
@@ -83,48 +62,88 @@ ALTER TABLE public.nguoidung_sdt ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS p_nguoidung_select ON public.nguoidung;
 CREATE POLICY p_nguoidung_select ON public.nguoidung
 FOR SELECT TO authenticated
-USING (auth_user_id = auth.uid());
+USING (lower(email) = lower(auth.jwt() ->> 'email'));
 
 DROP POLICY IF EXISTS p_nguoidung_insert ON public.nguoidung;
 CREATE POLICY p_nguoidung_insert ON public.nguoidung
 FOR INSERT TO authenticated
-WITH CHECK (auth_user_id = auth.uid());
+WITH CHECK (lower(email) = lower(auth.jwt() ->> 'email'));
 
 DROP POLICY IF EXISTS p_nguoidung_update ON public.nguoidung;
 CREATE POLICY p_nguoidung_update ON public.nguoidung
 FOR UPDATE TO authenticated
-USING (auth_user_id = auth.uid())
-WITH CHECK (auth_user_id = auth.uid());
+USING (lower(email) = lower(auth.jwt() ->> 'email'))
+WITH CHECK (lower(email) = lower(auth.jwt() ->> 'email'));
 
 DROP POLICY IF EXISTS p_vitien_all ON public.vitien;
 CREATE POLICY p_vitien_all ON public.vitien
 FOR ALL TO authenticated
-USING (id_nguoi_dung IN (SELECT nguoidung_id FROM public.nguoidung WHERE auth_user_id = auth.uid()))
-WITH CHECK (id_nguoi_dung IN (SELECT nguoidung_id FROM public.nguoidung WHERE auth_user_id = auth.uid()));
+USING (
+  id_nguoi_dung IN (
+    SELECT nguoidung_id FROM public.nguoidung WHERE lower(email) = lower(auth.jwt() ->> 'email')
+  )
+)
+WITH CHECK (
+  id_nguoi_dung IN (
+    SELECT nguoidung_id FROM public.nguoidung WHERE lower(email) = lower(auth.jwt() ->> 'email')
+  )
+);
 
 DROP POLICY IF EXISTS p_giaodich_all ON public.giaodich;
 CREATE POLICY p_giaodich_all ON public.giaodich
 FOR ALL TO authenticated
-USING (id_nguoi_dung IN (SELECT nguoidung_id FROM public.nguoidung WHERE auth_user_id = auth.uid()))
-WITH CHECK (id_nguoi_dung IN (SELECT nguoidung_id FROM public.nguoidung WHERE auth_user_id = auth.uid()));
+USING (
+  id_nguoi_dung IN (
+    SELECT nguoidung_id FROM public.nguoidung WHERE lower(email) = lower(auth.jwt() ->> 'email')
+  )
+)
+WITH CHECK (
+  id_nguoi_dung IN (
+    SELECT nguoidung_id FROM public.nguoidung WHERE lower(email) = lower(auth.jwt() ->> 'email')
+  )
+);
 
 DROP POLICY IF EXISTS p_ngansach_all ON public.ngansach;
 CREATE POLICY p_ngansach_all ON public.ngansach
 FOR ALL TO authenticated
-USING (id_nguoi_dung IN (SELECT nguoidung_id FROM public.nguoidung WHERE auth_user_id = auth.uid()))
-WITH CHECK (id_nguoi_dung IN (SELECT nguoidung_id FROM public.nguoidung WHERE auth_user_id = auth.uid()));
+USING (
+  id_nguoi_dung IN (
+    SELECT nguoidung_id FROM public.nguoidung WHERE lower(email) = lower(auth.jwt() ->> 'email')
+  )
+)
+WITH CHECK (
+  id_nguoi_dung IN (
+    SELECT nguoidung_id FROM public.nguoidung WHERE lower(email) = lower(auth.jwt() ->> 'email')
+  )
+);
 
 DROP POLICY IF EXISTS p_muctieu_all ON public.muctieutaichinh;
 CREATE POLICY p_muctieu_all ON public.muctieutaichinh
 FOR ALL TO authenticated
-USING (id_nguoi_dung IN (SELECT nguoidung_id FROM public.nguoidung WHERE auth_user_id = auth.uid()))
-WITH CHECK (id_nguoi_dung IN (SELECT nguoidung_id FROM public.nguoidung WHERE auth_user_id = auth.uid()));
+USING (
+  id_nguoi_dung IN (
+    SELECT nguoidung_id FROM public.nguoidung WHERE lower(email) = lower(auth.jwt() ->> 'email')
+  )
+)
+WITH CHECK (
+  id_nguoi_dung IN (
+    SELECT nguoidung_id FROM public.nguoidung WHERE lower(email) = lower(auth.jwt() ->> 'email')
+  )
+);
 
 DROP POLICY IF EXISTS p_baocao_all ON public.baocaotaichinh;
 CREATE POLICY p_baocao_all ON public.baocaotaichinh
 FOR ALL TO authenticated
-USING (id_nguoi_dung IN (SELECT nguoidung_id FROM public.nguoidung WHERE auth_user_id = auth.uid()))
-WITH CHECK (id_nguoi_dung IN (SELECT nguoidung_id FROM public.nguoidung WHERE auth_user_id = auth.uid()));
+USING (
+  id_nguoi_dung IN (
+    SELECT nguoidung_id FROM public.nguoidung WHERE lower(email) = lower(auth.jwt() ->> 'email')
+  )
+)
+WITH CHECK (
+  id_nguoi_dung IN (
+    SELECT nguoidung_id FROM public.nguoidung WHERE lower(email) = lower(auth.jwt() ->> 'email')
+  )
+);
 
 DROP POLICY IF EXISTS p_danhmuc_select ON public.danhmuc;
 CREATE POLICY p_danhmuc_select ON public.danhmuc
@@ -173,14 +192,14 @@ USING (
   EXISTS (
     SELECT 1 FROM public.nguoidung n
     WHERE n.nguoidung_id = public.nguoidung_sdt.nguoidung_id
-      AND n.auth_user_id = auth.uid()
+      AND lower(n.email) = lower(auth.jwt() ->> 'email')
   )
 )
 WITH CHECK (
   EXISTS (
     SELECT 1 FROM public.nguoidung n
     WHERE n.nguoidung_id = public.nguoidung_sdt.nguoidung_id
-      AND n.auth_user_id = auth.uid()
+      AND lower(n.email) = lower(auth.jwt() ->> 'email')
   )
 );
 
