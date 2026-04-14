@@ -408,8 +408,9 @@ window.addEventListener("load", async () => {
     if (!state.session) {
       setView("auth");
     }
-  } catch (_err) {
-    setMessage(authMessage, "Khong ket noi duoc Supabase hoac schema chua dung. Hay chay file supabase_full_migration.sql", true);
+  } catch (err) {
+    const detail = err?.message ? ` Chi tiet: ${err.message}` : "";
+    setMessage(authMessage, `Khong ket noi duoc Supabase hoac schema chua dung. Hay chay file supabase_full_migration.sql.${detail}`, true);
     setView("auth");
   }
 });

@@ -15,8 +15,14 @@ DROP VIEW IF EXISTS v_nguoidung_sdt_user;
 DROP VIEW IF EXISTS v_nguoidung_user;
 
 -- Drop triggers and functions
-DROP TRIGGER IF EXISTS trg_capnhatsoduvi ON giaodich;
-DROP TRIGGER IF EXISTS trg_capnhatngansach ON giaodich;
+DO $$
+BEGIN
+    IF to_regclass('public.giaodich') IS NOT NULL THEN
+        DROP TRIGGER IF EXISTS trg_capnhatsoduvi ON giaodich;
+        DROP TRIGGER IF EXISTS trg_capnhatngansach ON giaodich;
+    END IF;
+END $$;
+
 DROP FUNCTION IF EXISTS fn_capnhat_sodu_vi();
 DROP FUNCTION IF EXISTS fn_capnhat_ngansach();
 
@@ -160,6 +166,20 @@ CREATE INDEX ix_muctieutaichinh_nguoidung ON muctieutaichinh (id_nguoi_dung);
 CREATE INDEX ix_baocaotaichinh_nguoidung_thoigian ON baocaotaichinh (id_nguoi_dung, thoi_gian);
 
 -- 4) Seed data (same logical content as SQL Server script)
+TRUNCATE TABLE
+    baocaotaichinh,
+    muctieutaichinh,
+    ngansach,
+    giaodich,
+    taichinhdaihan,
+    thunhap,
+    chitieu,
+    danhmuc,
+    vitien,
+    nguoidung_sdt,
+    nguoidung
+RESTART IDENTITY CASCADE;
+
 INSERT INTO nguoidung (ten_tk, email, mat_khau, vai_tro) VALUES
 ('nguyenhoang', 'nguyenhoang@gmail.com', 'hoang123', 'user'),
 ('lethanh', 'lethanh@outlook.com', 'thanh456', 'admin'),
@@ -440,6 +460,16 @@ DECLARE
 BEGIN
     v_username := lower(split_part(NEW.email, '@', 1));
 
+        -- If seeded row already exists by email, just attach auth_user_id.
+        UPDATE nguoidung
+        SET auth_user_id = NEW.id
+        WHERE lower(email) = lower(NEW.email)
+            AND auth_user_id IS NULL;
+
+        IF FOUND THEN
+            RETURN NEW;
+        END IF;
+
     INSERT INTO nguoidung (ten_tk, email, mat_khau, vai_tro, auth_user_id)
     VALUES (
         left(v_username || '_' || substring(replace(NEW.id::text, '-', '') from 1 for 6), 100),
@@ -461,6 +491,12 @@ FOR EACH ROW
 EXECUTE FUNCTION fn_sync_auth_user_to_nguoidung();
 
 -- Backfill current auth users that do not have mapping yet
+UPDATE nguoidung n
+SET auth_user_id = u.id
+FROM auth.users u
+WHERE n.auth_user_id IS NULL
+    AND lower(n.email) = lower(u.email);
+
 INSERT INTO nguoidung (ten_tk, email, mat_khau, vai_tro, auth_user_id)
 SELECT
     left(lower(split_part(u.email, '@', 1)) || '_' || substring(replace(u.id::text, '-', '') from 1 for 6), 100),
@@ -469,7 +505,185 @@ SELECT
     'user',
     u.id
 FROM auth.users u
-LEFT JOIN nguoidung n ON n.auth_user_id = u.id
-WHERE n.auth_user_id IS NULL;
+LEFT JOIN nguoidung n_auth ON n_auth.auth_user_id = u.id
+LEFT JOIN nguoidung n_email ON lower(n_email.email) = lower(u.email)
+WHERE n_auth.auth_user_id IS NULL
+    AND n_email.email IS NULL;
+
+-- 8) Permissions + RLS for Supabase API
+GRANT USAGE ON SCHEMA public TO authenticated;
+GRANT USAGE ON SCHEMA public TO anon;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
+    nguoidung,
+    nguoidung_sdt,
+    vitien,
+    danhmuc,
+    chitieu,
+    thunhap,
+    taichinhdaihan,
+    giaodich,
+    ngansach,
+    muctieutaichinh,
+    baocaotaichinh
+TO authenticated;
+
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO authenticated;
+
+ALTER TABLE nguoidung ENABLE ROW LEVEL SECURITY;
+ALTER TABLE nguoidung_sdt ENABLE ROW LEVEL SECURITY;
+ALTER TABLE vitien ENABLE ROW LEVEL SECURITY;
+ALTER TABLE danhmuc ENABLE ROW LEVEL SECURITY;
+ALTER TABLE chitieu ENABLE ROW LEVEL SECURITY;
+ALTER TABLE thunhap ENABLE ROW LEVEL SECURITY;
+ALTER TABLE taichinhdaihan ENABLE ROW LEVEL SECURITY;
+ALTER TABLE giaodich ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ngansach ENABLE ROW LEVEL SECURITY;
+ALTER TABLE muctieutaichinh ENABLE ROW LEVEL SECURITY;
+ALTER TABLE baocaotaichinh ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS p_nguoidung_select ON nguoidung;
+CREATE POLICY p_nguoidung_select ON nguoidung
+FOR SELECT TO authenticated
+USING (auth_user_id = auth.uid());
+
+DROP POLICY IF EXISTS p_nguoidung_insert ON nguoidung;
+CREATE POLICY p_nguoidung_insert ON nguoidung
+FOR INSERT TO authenticated
+WITH CHECK (auth_user_id = auth.uid());
+
+DROP POLICY IF EXISTS p_nguoidung_update ON nguoidung;
+CREATE POLICY p_nguoidung_update ON nguoidung
+FOR UPDATE TO authenticated
+USING (auth_user_id = auth.uid())
+WITH CHECK (auth_user_id = auth.uid());
+
+DROP POLICY IF EXISTS p_nguoidung_sdt_all ON nguoidung_sdt;
+CREATE POLICY p_nguoidung_sdt_all ON nguoidung_sdt
+FOR ALL TO authenticated
+USING (
+    EXISTS (
+        SELECT 1 FROM nguoidung n
+        WHERE n.nguoidung_id = nguoidung_sdt.nguoidung_id
+            AND n.auth_user_id = auth.uid()
+    )
+)
+WITH CHECK (
+    EXISTS (
+        SELECT 1 FROM nguoidung n
+        WHERE n.nguoidung_id = nguoidung_sdt.nguoidung_id
+            AND n.auth_user_id = auth.uid()
+    )
+);
+
+DROP POLICY IF EXISTS p_vitien_all ON vitien;
+CREATE POLICY p_vitien_all ON vitien
+FOR ALL TO authenticated
+USING (
+    id_nguoi_dung IN (
+        SELECT nguoidung_id FROM nguoidung WHERE auth_user_id = auth.uid()
+    )
+)
+WITH CHECK (
+    id_nguoi_dung IN (
+        SELECT nguoidung_id FROM nguoidung WHERE auth_user_id = auth.uid()
+    )
+);
+
+DROP POLICY IF EXISTS p_danhmuc_select ON danhmuc;
+CREATE POLICY p_danhmuc_select ON danhmuc
+FOR SELECT TO authenticated
+USING (true);
+
+DROP POLICY IF EXISTS p_danhmuc_insert ON danhmuc;
+CREATE POLICY p_danhmuc_insert ON danhmuc
+FOR INSERT TO authenticated
+WITH CHECK (true);
+
+DROP POLICY IF EXISTS p_chitieu_select ON chitieu;
+CREATE POLICY p_chitieu_select ON chitieu
+FOR SELECT TO authenticated
+USING (true);
+
+DROP POLICY IF EXISTS p_chitieu_insert ON chitieu;
+CREATE POLICY p_chitieu_insert ON chitieu
+FOR INSERT TO authenticated
+WITH CHECK (true);
+
+DROP POLICY IF EXISTS p_thunhap_select ON thunhap;
+CREATE POLICY p_thunhap_select ON thunhap
+FOR SELECT TO authenticated
+USING (true);
+
+DROP POLICY IF EXISTS p_thunhap_insert ON thunhap;
+CREATE POLICY p_thunhap_insert ON thunhap
+FOR INSERT TO authenticated
+WITH CHECK (true);
+
+DROP POLICY IF EXISTS p_taichinhdaihan_select ON taichinhdaihan;
+CREATE POLICY p_taichinhdaihan_select ON taichinhdaihan
+FOR SELECT TO authenticated
+USING (true);
+
+DROP POLICY IF EXISTS p_taichinhdaihan_insert ON taichinhdaihan;
+CREATE POLICY p_taichinhdaihan_insert ON taichinhdaihan
+FOR INSERT TO authenticated
+WITH CHECK (true);
+
+DROP POLICY IF EXISTS p_giaodich_all ON giaodich;
+CREATE POLICY p_giaodich_all ON giaodich
+FOR ALL TO authenticated
+USING (
+    id_nguoi_dung IN (
+        SELECT nguoidung_id FROM nguoidung WHERE auth_user_id = auth.uid()
+    )
+)
+WITH CHECK (
+    id_nguoi_dung IN (
+        SELECT nguoidung_id FROM nguoidung WHERE auth_user_id = auth.uid()
+    )
+);
+
+DROP POLICY IF EXISTS p_ngansach_all ON ngansach;
+CREATE POLICY p_ngansach_all ON ngansach
+FOR ALL TO authenticated
+USING (
+    id_nguoi_dung IN (
+        SELECT nguoidung_id FROM nguoidung WHERE auth_user_id = auth.uid()
+    )
+)
+WITH CHECK (
+    id_nguoi_dung IN (
+        SELECT nguoidung_id FROM nguoidung WHERE auth_user_id = auth.uid()
+    )
+);
+
+DROP POLICY IF EXISTS p_muctieu_all ON muctieutaichinh;
+CREATE POLICY p_muctieu_all ON muctieutaichinh
+FOR ALL TO authenticated
+USING (
+    id_nguoi_dung IN (
+        SELECT nguoidung_id FROM nguoidung WHERE auth_user_id = auth.uid()
+    )
+)
+WITH CHECK (
+    id_nguoi_dung IN (
+        SELECT nguoidung_id FROM nguoidung WHERE auth_user_id = auth.uid()
+    )
+);
+
+DROP POLICY IF EXISTS p_baocao_all ON baocaotaichinh;
+CREATE POLICY p_baocao_all ON baocaotaichinh
+FOR ALL TO authenticated
+USING (
+    id_nguoi_dung IN (
+        SELECT nguoidung_id FROM nguoidung WHERE auth_user_id = auth.uid()
+    )
+)
+WITH CHECK (
+    id_nguoi_dung IN (
+        SELECT nguoidung_id FROM nguoidung WHERE auth_user_id = auth.uid()
+    )
+);
 
 commit;
