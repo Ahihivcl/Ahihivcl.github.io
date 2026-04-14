@@ -33,6 +33,16 @@ Schema FULL trong `supabase/schema.sql` bao gom:
 - Procedure `sp_taologinvauser` (best effort tren Supabase).
 - Seed data tuong duong SQL goc.
 
+## Chuc nang app da mo rong theo SQL goc
+
+- Dang ky, dang nhap bang `nguoidung`.
+- Quan ly giao dich (`giaodich`) theo role user/admin.
+- Quan ly SDT nguoi dung (`nguoidung_sdt`).
+- Quan ly ngan sach (`ngansach`).
+- Quan ly muc tieu tai chinh (`muctieutaichinh`).
+- Tao va xem bao cao tai chinh (`baocaotaichinh`).
+- Admin CRUD user va xem tong quan he thong.
+
 Tai khoan demo:
 
 - Admin: `lethanh` / `thanh456`

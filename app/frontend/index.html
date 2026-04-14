@@ -94,6 +94,105 @@
         </article>
       </section>
 
+      <section class="grid">
+        <article class="box">
+          <h3>So dien thoai nguoi dung</h3>
+          <form id="phoneForm" class="stack">
+            <input id="phoneNumber" placeholder="Nhap SDT" required>
+            <select id="phoneUser" class="admin-only hidden"></select>
+            <button type="submit">Them SDT</button>
+          </form>
+          <p id="phoneMessage" class="message"></p>
+          <div class="table-wrap mt8">
+            <table>
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>SDT</th>
+                </tr>
+              </thead>
+              <tbody id="phoneTable"></tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="box">
+          <h3>Ngan sach</h3>
+          <form id="budgetForm" class="stack">
+            <input id="budgetName" placeholder="Ten ngan sach" required>
+            <input id="budgetLimit" type="number" min="1" step="0.01" placeholder="So tien gioi han" required>
+            <select id="budgetCategory" required></select>
+            <input id="budgetStart" type="date">
+            <input id="budgetEnd" type="date">
+            <select id="budgetUser" class="admin-only hidden"></select>
+            <button type="submit">Them ngan sach</button>
+          </form>
+          <p id="budgetMessage" class="message"></p>
+          <div class="table-wrap mt8">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Ten</th>
+                  <th>Gioi han</th>
+                  <th>User</th>
+                </tr>
+              </thead>
+              <tbody id="budgetTable"></tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
+      <section class="grid">
+        <article class="box">
+          <h3>Muc tieu tai chinh</h3>
+          <form id="goalForm" class="stack">
+            <input id="goalName" placeholder="Ten muc tieu" required>
+            <input id="goalAmount" type="number" min="1" step="0.01" placeholder="So tien can dat" required>
+            <input id="goalDeadline" type="date" required>
+            <select id="goalUser" class="admin-only hidden"></select>
+            <button type="submit">Them muc tieu</button>
+          </form>
+          <p id="goalMessage" class="message"></p>
+          <div class="table-wrap mt8">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Ten muc tieu</th>
+                  <th>So tien</th>
+                  <th>Trang thai</th>
+                </tr>
+              </thead>
+              <tbody id="goalTable"></tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="box">
+          <h3>Bao cao tai chinh</h3>
+          <form id="reportForm" class="stack">
+            <button type="submit">Tao bao cao moi</button>
+          </form>
+          <p id="reportMessage" class="message"></p>
+          <div class="table-wrap mt8">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Ten bao cao</th>
+                  <th>Tong thu</th>
+                  <th>Tong chi</th>
+                  <th>User</th>
+                </tr>
+              </thead>
+              <tbody id="reportTable"></tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
       <section id="adminSection" class="box hidden">
         <h3>Admin CRUD User</h3>
         <form id="userCreateForm" class="stack inline-grid">
