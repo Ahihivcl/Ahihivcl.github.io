@@ -2,6 +2,7 @@ const state = {
   supabase: null,
   session: null,
   profile: null,
+  nguoiDungId: null,
   categories: [],
   wallets: [],
   transactions: []
@@ -72,67 +73,92 @@ function initClient() {
   state.supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 }
 
-async function getProfile(userId) {
-  const { data, error } = await state.supabase
-    .from("profiles")
-    .select("id, username, role")
-    .eq("id", userId)
+async function ensureNguoiDungRecord(userId) {
+  const existing = await state.supabase
+    .from("nguoidung")
+    .select("nguoidung_id, ten_tk, email, vai_tro")
+    .eq("auth_user_id", userId)
     .single();
 
-  if (error && error.code !== "PGRST116") {
-    throw error;
+  if (!existing.error && existing.data) {
+    state.profile = existing.data;
+    state.nguoiDungId = existing.data.nguoidung_id;
+    return;
   }
 
-  state.profile = data || { id: userId, username: "user", role: "user" };
+  if (existing.error && existing.error.code !== "PGRST116") {
+    throw existing.error;
+  }
+
+  const email = state.session.user.email || "";
+  const username = (email.split("@")[0] || "user").toLowerCase();
+
+  const created = await state.supabase
+    .from("nguoidung")
+    .insert({
+      ten_tk: username,
+      email,
+      mat_khau: "[supabase-auth]",
+      vai_tro: "user",
+      auth_user_id: userId
+    })
+    .select("nguoidung_id, ten_tk, email, vai_tro")
+    .single();
+
+  if (created.error) {
+    throw created.error;
+  }
+
+  state.profile = created.data;
+  state.nguoiDungId = created.data.nguoidung_id;
 }
 
 function fillOptions() {
   txCategory.innerHTML = state.categories
-    .map(c => `<option value="${c.id}">${c.name} (${c.kind})</option>`)
+    .map(c => `<option value="${c.danhmuc_id}">${c.ten_danh_muc} (${c.loai_danh_muc})</option>`)
     .join("");
 
   txWallet.innerHTML = state.wallets
-    .map(w => `<option value="${w.id}">${w.name} (${w.wallet_type})</option>`)
+    .map(w => `<option value="${w.vi_id}">${w.ten_vi} (${w.loai_vi})</option>`)
     .join("");
 }
 
 function renderTransactions() {
-  const categoryMap = new Map(state.categories.map(c => [c.id, c.name]));
-  const walletMap = new Map(state.wallets.map(w => [w.id, w.name]));
+  const categoryMap = new Map(state.categories.map(c => [c.danhmuc_id, c.ten_danh_muc]));
+  const walletMap = new Map(state.wallets.map(w => [w.vi_id, w.ten_vi]));
 
   txTable.innerHTML = state.transactions
     .map(tx => `
       <tr>
-        <td>${tx.id.slice(0, 8)}</td>
-        <td>${tx.title}</td>
-        <td>${Number(tx.amount).toLocaleString("vi-VN")}</td>
-        <td>${String(tx.transaction_date).slice(0, 10)}</td>
-        <td>${categoryMap.get(tx.category_id) || "-"}</td>
-        <td>${walletMap.get(tx.wallet_id) || "-"}</td>
+        <td>${tx.giaodich_id}</td>
+        <td>${tx.ten_giao_dich}</td>
+        <td>${Number(tx.so_tien).toLocaleString("vi-VN")}</td>
+        <td>${String(tx.ngay_giao_dich).slice(0, 10)}</td>
+        <td>${categoryMap.get(tx.id_danh_muc) || "-"}</td>
+        <td>${walletMap.get(tx.id_vi_tien) || "-"}</td>
       </tr>
     `)
     .join("");
 }
 
 async function refreshData() {
-  const uid = state.session.user.id;
+  const userId = state.nguoiDungId;
 
   const [walletRes, categoryRes, txRes] = await Promise.all([
     state.supabase
-      .from("wallets")
-      .select("id,name,wallet_type")
-      .eq("owner_id", uid)
-      .order("created_at", { ascending: false }),
+      .from("vitien")
+      .select("vi_id,ten_vi,loai_vi")
+      .eq("id_nguoi_dung", userId)
+      .order("vi_id", { ascending: true }),
     state.supabase
-      .from("categories")
-      .select("id,name,kind")
-      .eq("owner_id", uid)
-      .order("created_at", { ascending: false }),
+      .from("danhmuc")
+      .select("danhmuc_id,ten_danh_muc,loai_danh_muc")
+      .order("danhmuc_id", { ascending: true }),
     state.supabase
-      .from("transactions")
-      .select("id,title,amount,transaction_date,category_id,wallet_id")
-      .eq("owner_id", uid)
-      .order("transaction_date", { ascending: false })
+      .from("giaodich")
+      .select("giaodich_id,ten_giao_dich,so_tien,ngay_giao_dich,id_danh_muc,id_vi_tien")
+      .eq("id_nguoi_dung", userId)
+      .order("ngay_giao_dich", { ascending: false })
       .limit(100)
   ]);
 
@@ -162,10 +188,10 @@ async function bootstrapSession() {
   }
 
   state.session = data.session;
-  await getProfile(state.session.user.id);
+  await ensureNguoiDungRecord(state.session.user.id);
 
-  welcome.textContent = `Xin chao, ${state.profile.username || state.session.user.email}`;
-  roleBadge.textContent = `Role: ${state.profile.role || "user"}`;
+  welcome.textContent = `Xin chao, ${state.profile.ten_tk || state.session.user.email}`;
+  roleBadge.textContent = `Role: ${state.profile.vai_tro || "user"}`;
 
   setView("app");
   await refreshData();
@@ -186,9 +212,10 @@ loginForm.addEventListener("submit", async event => {
   }
 
   state.session = data.session;
-  await getProfile(state.session.user.id);
-  welcome.textContent = `Xin chao, ${state.profile.username || state.session.user.email}`;
-  roleBadge.textContent = `Role: ${state.profile.role || "user"}`;
+  await ensureNguoiDungRecord(state.session.user.id);
+
+  welcome.textContent = `Xin chao, ${state.profile.ten_tk || state.session.user.email}`;
+  roleBadge.textContent = `Role: ${state.profile.vai_tro || "user"}`;
 
   setView("app");
   await refreshData();
@@ -211,6 +238,7 @@ signupBtn.addEventListener("click", async () => {
       emailRedirectTo: window.location.href
     }
   });
+
   if (error) {
     setMessage(authMessage, mapAuthError(error, "signup"), true);
     return;
@@ -223,6 +251,7 @@ logoutBtn.addEventListener("click", async () => {
   await state.supabase.auth.signOut();
   state.session = null;
   state.profile = null;
+  state.nguoiDungId = null;
   state.wallets = [];
   state.categories = [];
   state.transactions = [];
@@ -241,11 +270,12 @@ walletForm.addEventListener("submit", async event => {
     return;
   }
 
-  const { error } = await state.supabase.from("wallets").insert({
-    owner_id: state.session.user.id,
-    name,
-    wallet_type: walletType,
-    balance: 0
+  const { error } = await state.supabase.from("vitien").insert({
+    ten_vi: name,
+    loai_vi: walletType,
+    so_du_hien_tai: 0,
+    ngay_tao: new Date().toISOString().slice(0, 10),
+    id_nguoi_dung: state.nguoiDungId
   });
 
   if (error) {
@@ -270,14 +300,40 @@ categoryForm.addEventListener("submit", async event => {
     return;
   }
 
-  const { error } = await state.supabase.from("categories").insert({
-    owner_id: state.session.user.id,
-    name,
-    kind
-  });
+  const loaiDanhMucMap = {
+    expense: "Phat sinh",
+    income: "Cong viec",
+    long_term: "Dau tu"
+  };
 
-  if (error) {
-    setMessage(appMessage, error.message, true);
+  const insertCategory = await state.supabase
+    .from("danhmuc")
+    .insert({
+      ten_danh_muc: name,
+      loai_danh_muc: loaiDanhMucMap[kind] || "Phat sinh",
+      mo_ta: "Danh muc tao tren app"
+    })
+    .select("danhmuc_id")
+    .single();
+
+  if (insertCategory.error) {
+    setMessage(appMessage, insertCategory.error.message, true);
+    return;
+  }
+
+  const categoryId = insertCategory.data.danhmuc_id;
+  const subTable = kind === "income" ? "thunhap" : (kind === "long_term" ? "taichinhdaihan" : "chitieu");
+
+  const subInsert = await state.supabase.from(subTable).insert(
+    subTable === "thunhap"
+      ? { thunhap_id: categoryId }
+      : subTable === "taichinhdaihan"
+      ? { taichinhdaihan_id: categoryId }
+      : { chitieu_id: categoryId }
+  );
+
+  if (subInsert.error) {
+    setMessage(appMessage, subInsert.error.message, true);
     return;
   }
 
@@ -296,16 +352,16 @@ txForm.addEventListener("submit", async event => {
   }
 
   const payload = {
-    owner_id: state.session.user.id,
-    title: document.getElementById("txName").value.trim(),
-    amount: Number(document.getElementById("txAmount").value),
-    transaction_date: document.getElementById("txDate").value,
-    category_id: txCategory.value,
-    wallet_id: txWallet.value,
-    note: document.getElementById("txNote").value.trim() || null
+    ten_giao_dich: document.getElementById("txName").value.trim(),
+    so_tien: Number(document.getElementById("txAmount").value),
+    ngay_giao_dich: document.getElementById("txDate").value,
+    id_danh_muc: txCategory.value,
+    id_vi_tien: txWallet.value,
+    id_nguoi_dung: state.nguoiDungId,
+    ghi_chu: document.getElementById("txNote").value.trim() || null
   };
 
-  const { error } = await state.supabase.from("transactions").insert(payload);
+  const { error } = await state.supabase.from("giaodich").insert(payload);
   if (error) {
     setMessage(appMessage, error.message, true);
     return;
@@ -324,7 +380,7 @@ window.addEventListener("load", async () => {
       setView("auth");
     }
   } catch (_err) {
-    setMessage(authMessage, "Khong ket noi duoc Supabase. Kiem tra URL/key trong app.js", true);
+    setMessage(authMessage, "Khong ket noi duoc Supabase hoac schema chua dung. Hay chay file supabase_full_migration.sql", true);
     setView("auth");
   }
 });
