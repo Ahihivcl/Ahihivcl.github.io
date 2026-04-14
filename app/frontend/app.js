@@ -36,6 +36,33 @@ function setMessage(target, text, isError = true) {
   target.style.color = isError ? "#b64635" : "#0b7a3d";
 }
 
+function mapAuthError(error, action) {
+  const message = (error && error.message ? error.message : "").toLowerCase();
+  const status = error && (error.status || error.code);
+
+  if (status === 429 || message.includes("for security purposes")) {
+    return "Ban thao tac qua nhanh (rate limit). Doi 1-5 phut roi thu lai.";
+  }
+
+  if (message.includes("email not confirmed")) {
+    return "Email chua xac thuc. Vao hop thu va bam link xac nhan truoc khi dang nhap.";
+  }
+
+  if (message.includes("invalid login credentials")) {
+    return "Sai email hoac mat khau. Luu y: dang nhap bang EMAIL, khong phai username cu.";
+  }
+
+  if (message.includes("email address") && message.includes("invalid")) {
+    return "Email khong hop le. Hay dung dia chi email that (vd: tenban@gmail.com).";
+  }
+
+  if (action === "signup") {
+    return error?.message || "Khong tao duoc tai khoan.";
+  }
+
+  return error?.message || "Dang nhap that bai.";
+}
+
 function setView(mode) {
   authCard.classList.toggle("hidden", mode !== "auth");
   appPanel.classList.toggle("hidden", mode !== "app");
@@ -154,7 +181,7 @@ loginForm.addEventListener("submit", async event => {
   const { data, error } = await state.supabase.auth.signInWithPassword({ email, password });
 
   if (error) {
-    setMessage(authMessage, error.message, true);
+    setMessage(authMessage, mapAuthError(error, "login"), true);
     return;
   }
 
@@ -177,13 +204,19 @@ signupBtn.addEventListener("click", async () => {
     return;
   }
 
-  const { error } = await state.supabase.auth.signUp({ email, password });
+  const { error } = await state.supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      emailRedirectTo: window.location.href
+    }
+  });
   if (error) {
-    setMessage(authMessage, error.message, true);
+    setMessage(authMessage, mapAuthError(error, "signup"), true);
     return;
   }
 
-  setMessage(authMessage, "Da tao tai khoan. Kiem tra email neu bat confirm.", false);
+  setMessage(authMessage, "Da tao tai khoan. Neu project bat confirm email, hay mo mail de xac thuc roi dang nhap.", false);
 });
 
 logoutBtn.addEventListener("click", async () => {
