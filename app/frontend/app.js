@@ -5,6 +5,9 @@ const state = {
   supabase: null
 };
 
+const DEFAULT_SUPABASE_URL = "https://dhfnyufxzlytrkadinpn.supabase.co";
+const DEFAULT_SUPABASE_KEY = "sb_publishable_NXcJo9m1MMnlV6iO7KDHFA_E4YVGhD5";
+
 const loginCard = document.getElementById("loginCard");
 const appPanel = document.getElementById("appPanel");
 const loginMessage = document.getElementById("loginMessage");
@@ -12,6 +15,7 @@ const txMessage = document.getElementById("txMessage");
 const adminMessage = document.getElementById("adminMessage");
 
 const loginForm = document.getElementById("loginForm");
+const registerForm = document.getElementById("registerForm");
 const txForm = document.getElementById("txForm");
 const userCreateForm = document.getElementById("userCreateForm");
 const logoutBtn = document.getElementById("logoutBtn");
@@ -28,9 +32,10 @@ const txWallet = document.getElementById("txWallet");
 
 const supabaseUrlInput = document.getElementById("supabaseUrl");
 const supabaseKeyInput = document.getElementById("supabaseKey");
+const registerMessage = document.getElementById("registerMessage");
 
-supabaseUrlInput.value = localStorage.getItem("supabaseUrl") || "";
-supabaseKeyInput.value = localStorage.getItem("supabaseKey") || "";
+supabaseUrlInput.value = localStorage.getItem("supabaseUrl") || DEFAULT_SUPABASE_URL;
+supabaseKeyInput.value = localStorage.getItem("supabaseKey") || DEFAULT_SUPABASE_KEY;
 
 function setMessage(target, text, isError = true) {
   target.textContent = text || "";
@@ -50,6 +55,66 @@ function makeClient() {
 
   state.supabase = window.supabase.createClient(url, key);
 }
+
+registerForm.addEventListener("submit", async e => {
+  e.preventDefault();
+  setMessage(registerMessage, "");
+
+  try {
+    makeClient();
+
+    const tenTK = document.getElementById("regUsername").value.trim();
+    const email = document.getElementById("regEmail").value.trim();
+    const matKhau = document.getElementById("regPassword").value;
+    const matKhau2 = document.getElementById("regPassword2").value;
+
+    if (!tenTK || !email || !matKhau) {
+      throw new Error("Vui long nhap day du thong tin");
+    }
+
+    if (matKhau !== matKhau2) {
+      throw new Error("Mat khau nhap lai khong khop");
+    }
+
+    const { data: newUser, error: insertUserErr } = await state.supabase
+      .from("nguoidung")
+      .insert([
+        {
+          ten_tk: tenTK,
+          email,
+          mat_khau: matKhau,
+          vai_tro: "user"
+        }
+      ])
+      .select("nguoidung_id, ten_tk")
+      .single();
+
+    if (insertUserErr) {
+      throw new Error(insertUserErr.message);
+    }
+
+    const { error: walletErr } = await state.supabase.from("vitien").insert([
+      {
+        ten_vi: "Vi mac dinh",
+        loai_vi: "Vi dien tu",
+        so_du_hien_tai: 0,
+        ngay_tao: new Date().toISOString().slice(0, 10),
+        id_nguoi_dung: newUser.nguoidung_id
+      }
+    ]);
+
+    if (walletErr) {
+      throw new Error(walletErr.message);
+    }
+
+    setMessage(registerMessage, `Tao tai khoan ${newUser.ten_tk} thanh cong. Ban co the dang nhap ngay.`, false);
+    registerForm.reset();
+    document.getElementById("username").value = tenTK;
+    document.getElementById("password").focus();
+  } catch (err) {
+    setMessage(registerMessage, err.message, true);
+  }
+});
 
 function renderMetrics(metricsData) {
   const entries = Object.entries(metricsData || {});

@@ -29,7 +29,28 @@
 
         <button type="submit">Dang nhap</button>
       </form>
+      <p class="muted">Thong tin Supabase da duoc dien san theo cau hinh ban gui.</p>
       <p id="loginMessage" class="message"></p>
+
+      <hr class="divider">
+
+      <h3>Tao tai khoan moi</h3>
+      <form id="registerForm">
+        <label for="regUsername">Ten tai khoan</label>
+        <input id="regUsername" name="regUsername" placeholder="vi du: usermoi" required>
+
+        <label for="regEmail">Email</label>
+        <input id="regEmail" name="regEmail" type="email" placeholder="vi du: user@gmail.com" required>
+
+        <label for="regPassword">Mat khau</label>
+        <input id="regPassword" name="regPassword" type="password" placeholder="Nhap mat khau" required>
+
+        <label for="regPassword2">Nhap lai mat khau</label>
+        <input id="regPassword2" name="regPassword2" type="password" placeholder="Nhap lai mat khau" required>
+
+        <button type="submit">Tao tai khoan</button>
+      </form>
+      <p id="registerMessage" class="message"></p>
     </section>
 
     <section id="appPanel" class="card hidden">

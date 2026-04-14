@@ -42,7 +42,7 @@ Tai khoan demo:
 
 1. Bat GitHub Pages cho repo (branch `main`, root).
 2. Mo `https://<username>.github.io/<repo>/`.
-3. O form login, nhap:
+3. O form login, URL/key da duoc dien san (co the sua neu can):
 
 - `Supabase URL`
 - `Supabase Publishable Key`
@@ -51,6 +51,11 @@ Tai khoan demo:
 
 - Admin: `lethanh` / `thanh456`
 - User: `nguyenhoang` / `hoang123`
+
+Ban cung co the tao tai khoan moi ngay tai man hinh login:
+
+- Form `Tao tai khoan moi` se them user vao bang `nguoidung` voi role `user`.
+- He thong tu tao `Vi mac dinh` trong bang `vitien` de co the them giao dich ngay.
 
 ## 3) Luu y bao mat
 

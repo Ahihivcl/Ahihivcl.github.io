@@ -181,6 +181,18 @@ td {
   font-size: 0.9rem;
 }
 
+.muted {
+  margin: 10px 0 0;
+  color: var(--soft);
+  font-size: 0.86rem;
+}
+
+.divider {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 14px 0;
+}
+
 .action-btn {
   padding: 7px 10px;
   border-radius: 8px;
