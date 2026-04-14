@@ -1,73 +1,66 @@
 # Demo QLCTCN: GitHub Pages + Supabase
 
-Muc tieu cua repo nay:
-
-- Frontend dat tren GitHub Pages.
-- Database dat tren Supabase PostgreSQL.
-- Backend API host cloud (Render), frontend github.io goi vao API do.
+Repo nay da duoc chuyen doi FULL tu SQL Server sang Supabase PostgreSQL, giu day du bang va chuc nang tu file goc.
 
 ## Kien truc
 
-- `index.html`: redirect nhanh toi giao dien app.
+- `index.html`: redirect den giao dien app.
 - `app/frontend`: giao dien dang nhap, dashboard, giao dich, admin CRUD user.
 - `app/backend`: Express API + JWT + PostgreSQL (`pg`).
-- `supabase/schema.sql`: script tao bang va seed mau cho Supabase.
+- `supabase/schema.sql`: script FULL conversion tu SQL goc.
 - `render.yaml`: blueprint deploy backend len Render.
 
-## 1) Tao database tren Supabase
+## 1) Tao database tren Supabase (FULL)
 
 1. Tao project Supabase.
 2. Vao SQL Editor.
 3. Chay file `supabase/schema.sql`.
-4. Xac nhan co du lieu mau:
+4. Kiem tra nhanh:
 
 ```sql
-SELECT * FROM app_users;
-SELECT * FROM categories;
-SELECT * FROM wallets;
-SELECT * FROM transactions;
+SELECT * FROM nguoidung;
+SELECT * FROM danhmuc;
+SELECT * FROM vitien;
+SELECT * FROM giaodich;
 ```
 
-Tai khoan demo sau seed:
+Schema FULL trong `supabase/schema.sql` bao gom:
+
+- 11 bang: `nguoidung`, `nguoidung_sdt`, `vitien`, `danhmuc`, `chitieu`, `thunhap`, `taichinhdaihan`, `giaodich`, `ngansach`, `muctieutaichinh`, `baocaotaichinh`.
+- Sequence auto-ID tuong duong SQL goc.
+- Trigger cap nhat so du vi va ngan sach.
+- Cac view user: `v_nguoidung_user`, `v_nguoidung_sdt_user`, `v_vitien_user`, `v_giaodich_user`, `v_ngansach_user`, `v_muctieutaichinh_user`, `v_baocaotaichinh_user`.
+- Procedure `sp_taologinvauser` (best effort tren Supabase).
+- Seed data tuong duong SQL goc.
+
+Tai khoan demo:
 
 - Admin: `lethanh` / `thanh456`
 - User: `nguyenhoang` / `hoang123`
 
-## 2) Deploy backend API (Render)
+## 2) Deploy backend API
 
 1. Push repo len GitHub.
-2. Vao Render -> `New` -> `Blueprint` -> chon repo.
-3. Render doc `render.yaml` va tao web service.
-4. Set env vars trong Render:
+2. Render -> `New` -> `Blueprint` -> chon repo.
+3. Set env vars:
 
-- `JWT_SECRET`: chuoi bi mat dai.
-- `DATABASE_URL`: connection string Postgres cua Supabase (pooler).
-- `DB_SSL`: `true`.
-- `CORS_ORIGIN`: domain GitHub Pages cua ban, vi du `https://yourname.github.io`.
+- `JWT_SECRET`
+- `DATABASE_URL` (Supabase Postgres pooler URL)
+- `DB_SSL=true`
+- `CORS_ORIGIN=https://<username>.github.io`
 
-5. Deploy xong, lay API URL, vi du `https://qlctcn-demo-app.onrender.com`.
+4. Deploy, nhan API URL backend.
 
 ## 3) Chay frontend tren GitHub Pages
 
-1. Bat GitHub Pages cho repo (branch `main`, folder root).
-2. Mo URL Pages: `https://<username>.github.io/<repo>/`.
-3. Man hinh login co o `app/frontend/index.html`.
-4. O truong `API URL`, nhap URL backend Render o buoc 2.
-5. Dang nhap va su dung.
-
-## 4) Checklist test end-to-end
-
-1. Dang nhap admin thanh cong.
-2. Tao user moi trong bang Admin.
-3. Dang nhap user moi vua tao.
-4. Them giao dich.
-5. Kiem tra transaction moi trong Supabase SQL Editor.
+1. Bat Pages cho repo (branch `main`, root).
+2. Mo `https://<username>.github.io/<repo>/`.
+3. O login, nhap `API URL` la URL backend vua deploy.
+4. Dang nhap va su dung.
 
 ## Local (tuy chon)
 
-Neu can chay local backend:
-
 1. Tao `.env` tu `app/backend/.env.example`.
-2. Trong `app/backend`, chay `npm install`.
+2. Chay `npm install` trong `app/backend`.
 3. Chay `npm start`.
 4. Mo `http://localhost:3000`.

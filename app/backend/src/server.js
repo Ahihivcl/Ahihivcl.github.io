@@ -32,9 +32,9 @@ app.post("/api/auth/login", async (req, res) => {
   try {
     const result = await query(
       `
-      SELECT user_code AS "NguoiDung_ID", username AS "Ten_TK", email AS "Email", role AS "Vai_tro"
-      FROM app_users
-      WHERE username = $1 AND password = $2
+      SELECT nguoidung_id AS "NguoiDung_ID", ten_tk AS "Ten_TK", email AS "Email", vai_tro AS "Vai_tro"
+      FROM nguoidung
+      WHERE ten_tk = $1 AND mat_khau = $2
       LIMIT 1
       `,
       [username, password]
@@ -67,9 +67,9 @@ app.get("/api/dashboard", requireAuth, async (req, res) => {
   try {
     if (req.user.role === "admin") {
       const [users, wallets, txs] = await Promise.all([
-        query("SELECT COUNT(*)::int AS total FROM app_users"),
-        query("SELECT COUNT(*)::int AS total FROM wallets"),
-        query("SELECT COUNT(*)::int AS total FROM transactions")
+        query("SELECT COUNT(*)::int AS total FROM nguoidung"),
+        query("SELECT COUNT(*)::int AS total FROM vitien"),
+        query("SELECT COUNT(*)::int AS total FROM giaodich")
       ]);
 
       return res.json({
@@ -85,11 +85,13 @@ app.get("/api/dashboard", requireAuth, async (req, res) => {
     const summary = await query(
       `
       SELECT
-        COALESCE(SUM(CASE WHEN c.kind = 'income' THEN t.amount ELSE 0 END), 0) AS "TongThu",
-        COALESCE(SUM(CASE WHEN c.kind <> 'income' THEN t.amount ELSE 0 END), 0) AS "TongChi"
-      FROM transactions t
-      JOIN categories c ON c.category_code = t.category_code
-      WHERE t.user_code = $1
+        COALESCE(SUM(CASE WHEN tn.thunhap_id IS NOT NULL THEN gd.so_tien ELSE 0 END), 0) AS "TongThu",
+        COALESCE(SUM(CASE WHEN ct.chitieu_id IS NOT NULL OR tcdh.taichinhdaihan_id IS NOT NULL THEN gd.so_tien ELSE 0 END), 0) AS "TongChi"
+      FROM giaodich gd
+      LEFT JOIN thunhap tn ON gd.id_danh_muc = tn.thunhap_id
+      LEFT JOIN chitieu ct ON gd.id_danh_muc = ct.chitieu_id
+      LEFT JOIN taichinhdaihan tcdh ON gd.id_danh_muc = tcdh.taichinhdaihan_id
+      WHERE gd.id_nguoi_dung = $1
       `,
       [req.user.userId]
     );
@@ -111,24 +113,24 @@ app.get("/api/meta", requireAuth, async (req, res) => {
   try {
     const walletsPromise = req.user.role === "admin"
       ? query(
-          `SELECT wallet_code AS "Vi_ID", wallet_name AS "Ten_vi", user_code AS "ID_nguoi_dung"
-           FROM wallets
-           ORDER BY wallet_code`
+          `SELECT vi_id AS "Vi_ID", ten_vi AS "Ten_vi", id_nguoi_dung AS "ID_nguoi_dung"
+           FROM vitien
+           ORDER BY vi_id`
         )
       : query(
-          `SELECT wallet_code AS "Vi_ID", wallet_name AS "Ten_vi", user_code AS "ID_nguoi_dung"
-           FROM wallets
-           WHERE user_code = $1
-           ORDER BY wallet_code`,
+          `SELECT vi_id AS "Vi_ID", ten_vi AS "Ten_vi", id_nguoi_dung AS "ID_nguoi_dung"
+           FROM vitien
+           WHERE id_nguoi_dung = $1
+           ORDER BY vi_id`,
           [req.user.userId]
         );
 
     const [wallets, categories] = await Promise.all([
       walletsPromise,
       query(
-        `SELECT category_code AS "DanhMuc_ID", category_name AS "Ten_danh_muc"
-         FROM categories
-         ORDER BY category_code`
+        `SELECT danhmuc_id AS "DanhMuc_ID", ten_danh_muc AS "Ten_danh_muc"
+         FROM danhmuc
+         ORDER BY danhmuc_id`
       )
     ]);
 
@@ -144,37 +146,37 @@ app.get("/api/transactions", requireAuth, async (req, res) => {
       ? await query(
           `
           SELECT
-            t.transaction_code AS "GiaoDich_ID",
-            t.title AS "Ten_giao_dich",
-            t.amount AS "So_tien",
-            t.transaction_date AS "Ngay_giao_dich",
-            t.note AS "Ghi_chu",
-            t.user_code AS "ID_nguoi_dung",
-            c.category_name AS "Ten_danh_muc",
-            w.wallet_name AS "Ten_vi"
-          FROM transactions t
-          JOIN categories c ON c.category_code = t.category_code
-          JOIN wallets w ON w.wallet_code = t.wallet_code
-          ORDER BY t.transaction_date DESC, t.id DESC
+            gd.giaodich_id AS "GiaoDich_ID",
+            gd.ten_giao_dich AS "Ten_giao_dich",
+            gd.so_tien AS "So_tien",
+            gd.ngay_giao_dich AS "Ngay_giao_dich",
+            gd.ghi_chu AS "Ghi_chu",
+            gd.id_nguoi_dung AS "ID_nguoi_dung",
+            dm.ten_danh_muc AS "Ten_danh_muc",
+            vt.ten_vi AS "Ten_vi"
+          FROM giaodich gd
+          JOIN danhmuc dm ON dm.danhmuc_id = gd.id_danh_muc
+          JOIN vitien vt ON vt.vi_id = gd.id_vi_tien AND vt.id_nguoi_dung = gd.id_nguoi_dung
+          ORDER BY gd.ngay_giao_dich DESC, gd.giaodich_id DESC
           LIMIT 100
           `
         )
       : await query(
           `
           SELECT
-            t.transaction_code AS "GiaoDich_ID",
-            t.title AS "Ten_giao_dich",
-            t.amount AS "So_tien",
-            t.transaction_date AS "Ngay_giao_dich",
-            t.note AS "Ghi_chu",
-            t.user_code AS "ID_nguoi_dung",
-            c.category_name AS "Ten_danh_muc",
-            w.wallet_name AS "Ten_vi"
-          FROM transactions t
-          JOIN categories c ON c.category_code = t.category_code
-          JOIN wallets w ON w.wallet_code = t.wallet_code
-          WHERE t.user_code = $1
-          ORDER BY t.transaction_date DESC, t.id DESC
+            gd.giaodich_id AS "GiaoDich_ID",
+            gd.ten_giao_dich AS "Ten_giao_dich",
+            gd.so_tien AS "So_tien",
+            gd.ngay_giao_dich AS "Ngay_giao_dich",
+            gd.ghi_chu AS "Ghi_chu",
+            gd.id_nguoi_dung AS "ID_nguoi_dung",
+            dm.ten_danh_muc AS "Ten_danh_muc",
+            vt.ten_vi AS "Ten_vi"
+          FROM giaodich gd
+          JOIN danhmuc dm ON dm.danhmuc_id = gd.id_danh_muc
+          JOIN vitien vt ON vt.vi_id = gd.id_vi_tien AND vt.id_nguoi_dung = gd.id_nguoi_dung
+          WHERE gd.id_nguoi_dung = $1
+          ORDER BY gd.ngay_giao_dich DESC, gd.giaodich_id DESC
           LIMIT 100
           `,
           [req.user.userId]
@@ -206,7 +208,7 @@ app.post("/api/transactions", requireAuth, async (req, res) => {
   try {
     if (req.user.role !== "admin") {
       const walletCheck = await query(
-        "SELECT 1 AS ok FROM wallets WHERE wallet_code = $1 AND user_code = $2",
+        "SELECT 1 AS ok FROM vitien WHERE vi_id = $1 AND id_nguoi_dung = $2",
         [idVi, req.user.userId]
       );
 
@@ -217,7 +219,7 @@ app.post("/api/transactions", requireAuth, async (req, res) => {
 
     await query(
       `
-      INSERT INTO transactions (title, amount, transaction_date, note, user_code, category_code, wallet_code)
+      INSERT INTO giaodich (ten_giao_dich, so_tien, ngay_giao_dich, ghi_chu, id_nguoi_dung, id_danh_muc, id_vi_tien)
       VALUES ($1, $2, $3, $4, $5, $6, $7)
       `,
       [tenGiaoDich, Number(soTien), ngayGiaoDich, ghiChu || null, ownerId, idDanhMuc, idVi]
@@ -234,13 +236,13 @@ app.get("/api/admin/users", requireAuth, requireAdmin, async (_req, res) => {
     const result = await query(
       `
       SELECT
-        user_code AS "NguoiDung_ID",
-        username AS "Ten_TK",
+        nguoidung_id AS "NguoiDung_ID",
+        ten_tk AS "Ten_TK",
         email AS "Email",
-        role AS "Vai_tro",
-        created_at::date AS "Ngay_tao"
-      FROM app_users
-      ORDER BY user_code
+        vai_tro AS "Vai_tro",
+        ngay_tao AS "Ngay_tao"
+      FROM nguoidung
+      ORDER BY nguoidung_id
       `
     );
     return res.json(result.rows);
@@ -262,7 +264,7 @@ app.post("/api/admin/users", requireAuth, requireAdmin, async (req, res) => {
 
   try {
     await query(
-      "INSERT INTO app_users (username, email, password, role) VALUES ($1, $2, $3, $4)",
+      "INSERT INTO nguoidung (ten_tk, email, mat_khau, vai_tro) VALUES ($1, $2, $3, $4)",
       [tenTaiKhoan, email, matKhau, vaiTro]
     );
 
@@ -282,7 +284,7 @@ app.put("/api/admin/users/:id", requireAuth, requireAdmin, async (req, res) => {
 
   try {
     const result = await query(
-      "UPDATE app_users SET email = $1, password = $2, role = $3 WHERE user_code = $4",
+      "UPDATE nguoidung SET email = $1, mat_khau = $2, vai_tro = $3 WHERE nguoidung_id = $4",
       [email, matKhau, vaiTro, id]
     );
 
@@ -300,7 +302,7 @@ app.delete("/api/admin/users/:id", requireAuth, requireAdmin, async (req, res) =
   const { id } = req.params;
 
   try {
-    const result = await query("DELETE FROM app_users WHERE user_code = $1", [id]);
+    const result = await query("DELETE FROM nguoidung WHERE nguoidung_id = $1", [id]);
 
     if (result.rowCount === 0) {
       return res.status(404).json({ message: "Khong tim thay user" });
