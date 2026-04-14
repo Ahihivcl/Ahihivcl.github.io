@@ -42,10 +42,10 @@ Tai khoan demo:
 
 1. Bat GitHub Pages cho repo (branch `main`, root).
 2. Mo `https://<username>.github.io/<repo>/`.
-3. O form login, URL/key da duoc dien san (co the sua neu can):
+3. Frontend da hardcode san Supabase config, khong can nhap URL/key:
 
-- `Supabase URL`
-- `Supabase Publishable Key`
+- `https://dhfnyufxzlytrkadinpn.supabase.co`
+- `sb_publishable_NXcJo9m1MMnlV6iO7KDHFA_E4YVGhD5`
 
 4. Dang nhap bang bang `nguoidung`:
 

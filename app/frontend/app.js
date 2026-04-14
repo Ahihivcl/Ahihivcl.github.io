@@ -29,13 +29,7 @@ const adminSection = document.getElementById("adminSection");
 
 const txCategory = document.getElementById("txCategory");
 const txWallet = document.getElementById("txWallet");
-
-const supabaseUrlInput = document.getElementById("supabaseUrl");
-const supabaseKeyInput = document.getElementById("supabaseKey");
 const registerMessage = document.getElementById("registerMessage");
-
-supabaseUrlInput.value = localStorage.getItem("supabaseUrl") || DEFAULT_SUPABASE_URL;
-supabaseKeyInput.value = localStorage.getItem("supabaseKey") || DEFAULT_SUPABASE_KEY;
 
 function setMessage(target, text, isError = true) {
   target.textContent = text || "";
@@ -43,17 +37,7 @@ function setMessage(target, text, isError = true) {
 }
 
 function makeClient() {
-  const url = supabaseUrlInput.value.trim();
-  const key = supabaseKeyInput.value.trim();
-
-  if (!url || !key) {
-    throw new Error("Can nhap Supabase URL va Publishable Key");
-  }
-
-  localStorage.setItem("supabaseUrl", url);
-  localStorage.setItem("supabaseKey", key);
-
-  state.supabase = window.supabase.createClient(url, key);
+  state.supabase = window.supabase.createClient(DEFAULT_SUPABASE_URL, DEFAULT_SUPABASE_KEY);
 }
 
 registerForm.addEventListener("submit", async e => {
