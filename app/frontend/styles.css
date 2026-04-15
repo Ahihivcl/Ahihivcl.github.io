@@ -220,15 +220,31 @@ td {
   background: #dc2626;
 }
 
-.admin-json {
-  min-height: 150px;
-  font-family: Consolas, "Courier New", monospace;
-  resize: vertical;
-}
-
 .admin-table-toolbar,
 .admin-actions {
   align-items: center;
+}
+
+.admin-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.admin-form-field {
+  display: grid;
+  gap: 6px;
+}
+
+.admin-form-field label {
+  font-size: 0.85rem;
+  color: var(--soft);
+}
+
+.admin-form-field .pk-tag {
+  font-size: 0.75rem;
+  color: #0b7a6c;
+  margin-left: 6px;
 }
 
 #adminTableBody tr.is-selected {

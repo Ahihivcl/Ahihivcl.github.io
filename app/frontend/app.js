@@ -6,7 +6,8 @@ const state = {
   incomeCategorySet: new Set(),
   supabase: null,
   adminTableRows: [],
-  adminSelectedRow: null
+  adminSelectedRow: null,
+  adminTableColumns: []
 };
 
 const DEFAULT_SUPABASE_URL = "https://dhfnyufxzlytrkadinpn.supabase.co";
@@ -59,24 +60,25 @@ const adminTableSelect = document.getElementById("adminTableSelect");
 const adminTableReloadBtn = document.getElementById("adminTableReloadBtn");
 const adminTableHead = document.getElementById("adminTableHead");
 const adminTableBody = document.getElementById("adminTableBody");
-const adminRowJson = document.getElementById("adminRowJson");
+const adminFormGrid = document.getElementById("adminFormGrid");
 const adminInsertBtn = document.getElementById("adminInsertBtn");
 const adminUpdateBtn = document.getElementById("adminUpdateBtn");
 const adminDeleteBtn = document.getElementById("adminDeleteBtn");
+const adminFormResetBtn = document.getElementById("adminFormResetBtn");
 const adminTableMessage = document.getElementById("adminTableMessage");
 
 const ADMIN_TABLE_CONFIG = [
-  { name: "nguoidung", pk: ["nguoidung_id"] },
-  { name: "nguoidung_sdt", pk: ["nguoidung_id", "sdt"] },
-  { name: "vitien", pk: ["vi_id"] },
-  { name: "danhmuc", pk: ["danhmuc_id"] },
-  { name: "chitieu", pk: ["chitieu_id"] },
-  { name: "thunhap", pk: ["thunhap_id"] },
-  { name: "taichinhdaihan", pk: ["taichinhdaihan_id"] },
-  { name: "giaodich", pk: ["giaodich_id"] },
-  { name: "ngansach", pk: ["ngansach_id"] },
-  { name: "muctieutaichinh", pk: ["muctieu_id"] },
-  { name: "baocaotaichinh", pk: ["baocao_id"] }
+  { name: "nguoidung", pk: ["nguoidung_id"], columns: ["nguoidung_id", "ten_tk", "email", "mat_khau", "ngay_tao", "vai_tro"] },
+  { name: "nguoidung_sdt", pk: ["nguoidung_id", "sdt"], columns: ["nguoidung_id", "sdt"] },
+  { name: "vitien", pk: ["vi_id"], columns: ["vi_id", "ten_vi", "loai_vi", "so_du_hien_tai", "ngay_tao", "id_nguoi_dung"] },
+  { name: "danhmuc", pk: ["danhmuc_id"], columns: ["danhmuc_id", "ten_danh_muc", "loai_danh_muc", "mo_ta"] },
+  { name: "chitieu", pk: ["chitieu_id"], columns: ["chitieu_id"] },
+  { name: "thunhap", pk: ["thunhap_id"], columns: ["thunhap_id"] },
+  { name: "taichinhdaihan", pk: ["taichinhdaihan_id"], columns: ["taichinhdaihan_id"] },
+  { name: "giaodich", pk: ["giaodich_id"], columns: ["giaodich_id", "ten_giao_dich", "so_tien", "ngay_giao_dich", "ghi_chu", "id_nguoi_dung", "id_danh_muc", "id_vi_tien"] },
+  { name: "ngansach", pk: ["ngansach_id"], columns: ["ngansach_id", "ten_ngan_sach", "so_tien_gioi_han", "ngay_bat_dau", "ngay_ket_thuc", "id_nguoi_dung", "id_danh_muc"] },
+  { name: "muctieutaichinh", pk: ["muctieu_id"], columns: ["muctieu_id", "ten_muc_tieu", "so_tien_can_dat", "ngay_bat_dau", "thoi_han_hoan_thanh", "trang_thai", "id_nguoi_dung"] },
+  { name: "baocaotaichinh", pk: ["baocao_id"], columns: ["baocao_id", "ten_bao_cao", "tong_thu", "tong_chi", "thoi_gian", "id_nguoi_dung"] }
 ];
 
 function escapeHtml(value) {
@@ -93,6 +95,29 @@ function normalizeRowValue(value) {
     return null;
   }
   return value;
+}
+
+function prettyFieldName(column) {
+  return column
+    .split("_")
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function inferFieldType(column, value) {
+  if (column.includes("ngay") || column.includes("thoi_han") || column === "thoi_gian") {
+    return "date";
+  }
+
+  if (typeof value === "number") {
+    return "number";
+  }
+
+  if (column.startsWith("so_") || column.startsWith("tong_")) {
+    return "number";
+  }
+
+  return "text";
 }
 
 function getAdminTableConfig(tableName) {
@@ -167,36 +192,112 @@ function renderUserRows(rows) {
 
 function clearAdminSelection() {
   state.adminSelectedRow = null;
-  if (adminRowJson) {
-    adminRowJson.value = "";
-  }
   document.querySelectorAll("#adminTableBody tr").forEach(row => {
     row.classList.remove("is-selected");
   });
+  renderAdminForm();
+}
+
+function getAdminColumns(tableName, rows) {
+  const config = getAdminTableConfig(tableName);
+  const columnsFromConfig = config?.columns || [];
+  const columnsFromData = Array.from(new Set((rows || []).flatMap(row => Object.keys(row || {}))));
+
+  if (columnsFromConfig.length === 0) {
+    return columnsFromData;
+  }
+
+  const merged = [...columnsFromConfig];
+  columnsFromData.forEach(col => {
+    if (!merged.includes(col)) {
+      merged.push(col);
+    }
+  });
+
+  return merged;
+}
+
+function renderAdminForm(sourceRow = null) {
+  if (!adminFormGrid) {
+    return;
+  }
+
+  const tableName = adminTableSelect?.value;
+  const config = getAdminTableConfig(tableName);
+  const columns = state.adminTableColumns || [];
+
+  if (columns.length === 0) {
+    adminFormGrid.innerHTML = "<p class=\"muted\">Khong co cot de hien thi form.</p>";
+    return;
+  }
+
+  const row = sourceRow || {};
+  adminFormGrid.innerHTML = columns
+    .map(col => {
+      const inputType = inferFieldType(col, row[col]);
+      const isPk = Boolean(config?.pk?.includes(col));
+      const readOnly = Boolean(state.adminSelectedRow && isPk);
+      const value = row[col] == null ? "" : String(row[col]);
+      const tag = isPk ? "<span class=\"pk-tag\">PK</span>" : "";
+      return `
+        <div class="admin-form-field">
+          <label for="admin-field-${col}">${prettyFieldName(col)} ${tag}</label>
+          <input id="admin-field-${col}" data-admin-col="${col}" type="${inputType}" value="${escapeHtml(value)}" ${readOnly ? "readonly" : ""}>
+        </div>
+      `;
+    })
+    .join("");
+}
+
+function getAdminFormPayload() {
+  const payload = {};
+  const inputs = adminFormGrid.querySelectorAll("[data-admin-col]");
+
+  inputs.forEach(input => {
+    const key = input.getAttribute("data-admin-col");
+    const rawValue = input.value;
+    if (rawValue === "") {
+      return;
+    }
+
+    if (input.type === "number") {
+      const numberValue = Number(rawValue);
+      payload[key] = Number.isNaN(numberValue) ? rawValue : numberValue;
+      return;
+    }
+
+    payload[key] = normalizeRowValue(rawValue);
+  });
+
+  return payload;
 }
 
 function renderAdminTableRows(rows) {
   const data = rows || [];
   state.adminTableRows = data;
+  state.adminTableColumns = getAdminColumns(adminTableSelect.value, data);
 
   if (!adminTableHead || !adminTableBody) {
     return;
   }
 
-  if (data.length === 0) {
-    adminTableHead.innerHTML = "<tr><th>Du lieu</th><th>Hanh dong</th></tr>";
-    adminTableBody.innerHTML = "<tr><td colspan=\"2\">Bang hien tai chua co du lieu.</td></tr>";
+  const columns = state.adminTableColumns;
+
+  if (columns.length === 0) {
+    adminTableHead.innerHTML = "<tr><th>Du lieu</th></tr>";
+    adminTableBody.innerHTML = "<tr><td>Khong tim thay cot du lieu.</td></tr>";
     clearAdminSelection();
     return;
   }
 
-  const columnSet = new Set();
-  data.forEach(row => {
-    Object.keys(row).forEach(key => columnSet.add(key));
-  });
-  const columns = Array.from(columnSet);
-
   adminTableHead.innerHTML = `<tr>${columns.map(c => `<th>${escapeHtml(c)}</th>`).join("")}<th>Hanh dong</th></tr>`;
+
+  if (data.length === 0) {
+    adminTableBody.innerHTML = `<tr><td colspan="${columns.length + 1}">Bang hien tai chua co du lieu.</td></tr>`;
+    clearAdminSelection();
+    return;
+  }
+
   adminTableBody.innerHTML = data
     .map((row, idx) => {
       const cells = columns
@@ -237,10 +338,13 @@ async function loadAdminTableRows() {
 
 async function insertAdminRow() {
   const tableName = adminTableSelect.value;
-  const payload = JSON.parse(adminRowJson.value || "{}");
-  const normalized = Object.fromEntries(Object.entries(payload).map(([k, v]) => [k, normalizeRowValue(v)]));
+  const payload = getAdminFormPayload();
 
-  const { error } = await state.supabase.from(tableName).insert([normalized]);
+  if (Object.keys(payload).length === 0) {
+    throw new Error("Vui long nhap du lieu tren form");
+  }
+
+  const { error } = await state.supabase.from(tableName).insert([payload]);
   if (error) {
     throw new Error(error.message);
   }
@@ -258,10 +362,16 @@ async function updateAdminRow() {
     throw new Error("Hay chon dong can cap nhat truoc");
   }
 
-  const payload = JSON.parse(adminRowJson.value || "{}");
-  const normalized = Object.fromEntries(Object.entries(payload).map(([k, v]) => [k, normalizeRowValue(v)]));
+  const payload = getAdminFormPayload();
+  config.pk.forEach(pk => {
+    delete payload[pk];
+  });
 
-  let req = state.supabase.from(tableName).update(normalized);
+  if (Object.keys(payload).length === 0) {
+    throw new Error("Khong co truong nao de cap nhat");
+  }
+
+  let req = state.supabase.from(tableName).update(payload);
   config.pk.forEach(pk => {
     req = req.eq(pk, state.adminSelectedRow[pk]);
   });
@@ -412,7 +522,7 @@ window.pickAdminRow = function pickAdminRow(index) {
   }
 
   state.adminSelectedRow = { ...row };
-  adminRowJson.value = JSON.stringify(row, null, 2);
+  renderAdminForm(state.adminSelectedRow);
 
   document.querySelectorAll("#adminTableBody tr").forEach(el => {
     el.classList.remove("is-selected");
@@ -954,10 +1064,16 @@ adminDeleteBtn.addEventListener("click", async () => {
   }
 });
 
+adminFormResetBtn.addEventListener("click", () => {
+  clearAdminSelection();
+  setMessage(adminTableMessage, "Da reset form. Ban co the nhap du lieu moi.", false);
+});
+
 logoutBtn.addEventListener("click", () => {
   state.user = null;
   state.adminTableRows = [];
   state.adminSelectedRow = null;
+  state.adminTableColumns = [];
   appPanel.classList.add("hidden");
   loginCard.classList.remove("hidden");
   renderAdminTableRows([]);
