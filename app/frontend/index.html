@@ -70,9 +70,22 @@
             <select id="txCategory" required></select>
             <select id="txWallet" required></select>
             <input id="txNote" placeholder="Ghi chu (khong bat buoc)">
-            <button type="submit">Them giao dich</button>
+              <button id="txSubmitBtn" type="submit">Them giao dich</button>
           </form>
           <p id="txMessage" class="message"></p>
+            <hr class="divider">
+            <h3>Them vi</h3>
+            <form id="walletForm" class="stack">
+              <input id="walletName" placeholder="Ten vi" required>
+              <select id="walletType" required>
+                <option value="Tien mat">Tien mat</option>
+                <option value="Vi dien tu">Vi dien tu</option>
+                <option value="The vat ly">The vat ly</option>
+              </select>
+              <input id="walletBalance" type="number" min="0" step="0.01" value="0" placeholder="So du hien tai">
+              <button type="submit">Them vi</button>
+            </form>
+            <p id="walletMessage" class="message"></p>
         </article>
 
         <article class="box">

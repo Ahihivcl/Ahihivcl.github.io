@@ -20,6 +20,7 @@ const phoneMessage = document.getElementById("phoneMessage");
 const budgetMessage = document.getElementById("budgetMessage");
 const goalMessage = document.getElementById("goalMessage");
 const reportMessage = document.getElementById("reportMessage");
+const walletMessage = document.getElementById("walletMessage");
 
 const loginForm = document.getElementById("loginForm");
 const registerForm = document.getElementById("registerForm");
@@ -29,6 +30,7 @@ const phoneForm = document.getElementById("phoneForm");
 const budgetForm = document.getElementById("budgetForm");
 const goalForm = document.getElementById("goalForm");
 const reportForm = document.getElementById("reportForm");
+const walletForm = document.getElementById("walletForm");
 const logoutBtn = document.getElementById("logoutBtn");
 
 const welcome = document.getElementById("welcome");
@@ -42,6 +44,7 @@ const phoneTable = document.getElementById("phoneTable");
 const budgetTable = document.getElementById("budgetTable");
 const goalTable = document.getElementById("goalTable");
 const reportTable = document.getElementById("reportTable");
+const txSubmitBtn = document.getElementById("txSubmitBtn");
 
 const txCategory = document.getElementById("txCategory");
 const txWallet = document.getElementById("txWallet");
@@ -163,6 +166,24 @@ function renderReports(rows) {
     .join("");
 }
 
+function updateWalletDependentUI() {
+  const hasWallet = state.wallets.length > 0;
+  txWallet.disabled = !hasWallet;
+  txSubmitBtn.disabled = !hasWallet;
+
+  if (!hasWallet) {
+    txWallet.innerHTML = "<option value=''>Chua co vi nao. Hay them vi truoc khi tao giao dich.</option>";
+    if (!txMessage.textContent) {
+      setMessage(txMessage, "Ban chua co vi. Vui long them vi de co the tao giao dich.", true);
+    }
+    return;
+  }
+
+  if (txMessage.textContent.includes("chua co vi")) {
+    setMessage(txMessage, "", false);
+  }
+}
+
 function fillSelectOptions() {
   txCategory.innerHTML = state.categories
     .map(c => `<option value="${c.danhmuc_id}">${c.danhmuc_id} - ${c.ten_danh_muc}</option>`)
@@ -183,6 +204,7 @@ function fillSelectOptions() {
   phoneUser.innerHTML = userOptions;
   budgetUser.innerHTML = userOptions;
   goalUser.innerHTML = userOptions;
+  updateWalletDependentUI();
 }
 
 function toggleAdminUI() {
@@ -344,21 +366,7 @@ registerForm.addEventListener("submit", async e => {
       throw new Error(insertUserErr.message);
     }
 
-    const { error: walletErr } = await state.supabase.from("vitien").insert([
-      {
-        ten_vi: "Vi mac dinh",
-        loai_vi: "Vi dien tu",
-        so_du_hien_tai: 0,
-        ngay_tao: new Date().toISOString().slice(0, 10),
-        id_nguoi_dung: newUser.nguoidung_id
-      }
-    ]);
-
-    if (walletErr) {
-      throw new Error(walletErr.message);
-    }
-
-    setMessage(registerMessage, `Tao tai khoan ${newUser.ten_tk} thanh cong. Ban co the dang nhap ngay.`, false);
+    setMessage(registerMessage, `Tao tai khoan ${newUser.ten_tk} thanh cong. Dang nhap va tu tao vi dau tien cua ban.`, false);
     registerForm.reset();
     document.getElementById("username").value = tenTK;
     document.getElementById("password").focus();
@@ -409,6 +417,11 @@ txForm.addEventListener("submit", async e => {
   e.preventDefault();
   setMessage(txMessage, "");
 
+  if (!txWallet.value) {
+    setMessage(txMessage, "Ban chua co vi. Vui long them vi truoc khi tao giao dich.", true);
+    return;
+  }
+
   const payload = {
     ten_giao_dich: document.getElementById("txName").value.trim(),
     so_tien: Number(document.getElementById("txAmount").value),
@@ -432,6 +445,47 @@ txForm.addEventListener("submit", async e => {
     await refreshData();
   } catch (err) {
     setMessage(txMessage, err.message, true);
+  }
+});
+
+walletForm.addEventListener("submit", async e => {
+  e.preventDefault();
+  setMessage(walletMessage, "");
+
+  const tenVi = document.getElementById("walletName").value.trim();
+  const loaiVi = document.getElementById("walletType").value;
+  const soDu = Number(document.getElementById("walletBalance").value || 0);
+
+  if (!tenVi) {
+    setMessage(walletMessage, "Vui long nhap ten vi", true);
+    return;
+  }
+
+  if (Number.isNaN(soDu) || soDu < 0) {
+    setMessage(walletMessage, "So du hien tai khong hop le", true);
+    return;
+  }
+
+  const payload = {
+    ten_vi: tenVi,
+    loai_vi: loaiVi,
+    so_du_hien_tai: soDu,
+    ngay_tao: new Date().toISOString().slice(0, 10),
+    id_nguoi_dung: currentUserCode()
+  };
+
+  try {
+    const { error } = await state.supabase.from("vitien").insert([payload]);
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    setMessage(walletMessage, "Them vi thanh cong", false);
+    walletForm.reset();
+    document.getElementById("walletBalance").value = 0;
+    await refreshData();
+  } catch (err) {
+    setMessage(walletMessage, err.message, true);
   }
 });
 
