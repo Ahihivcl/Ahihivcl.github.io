@@ -13,7 +13,7 @@
   <main class="shell">
     <section id="loginCard" class="card login-card">
       <h1>Dang nhap he thong</h1>
-      <p>Demo CSDL Quan Ly Chi Tieu Ca Nhan</p>
+      <p class="lead">Quan ly chi tieu ca nhan theo vai tro User/Admin</p>
       <form id="loginForm">
         <label for="username">Ten tai khoan</label>
         <input id="username" name="username" placeholder="vi du: lethanh" required>
@@ -47,7 +47,7 @@
       <p id="registerMessage" class="message"></p>
     </section>
 
-    <section id="appPanel" class="card hidden">
+      <section id="appPanel" class="card hidden dashboard">
       <header class="topbar">
         <div>
           <h2 id="welcome">Xin chao</h2>
@@ -60,9 +60,17 @@
 
       <section class="metrics" id="metrics"></section>
 
-      <section class="grid">
+      <nav class="quick-nav">
+        <a href="#sec-transactions">Giao dich va vi</a>
+        <a href="#sec-phones-budget">SDT va ngan sach</a>
+        <a href="#sec-goals-reports">Muc tieu va bao cao</a>
+        <a href="#adminSection">Quan tri</a>
+      </nav>
+
+      <section class="grid" id="sec-transactions">
         <article class="box">
-          <h3>Giao dich</h3>
+          <h3>Nhap lieu nhanh</h3>
+          <p class="muted compact">Them giao dich va vi ngay trong mot khu vuc de thao tac lien mach.</p>
           <form id="txForm" class="stack">
             <input id="txName" placeholder="Ten giao dich" required>
             <input id="txAmount" type="number" min="1" step="0.01" placeholder="So tien" required>
@@ -90,6 +98,7 @@
 
         <article class="box">
           <h3>Danh sach giao dich gan day</h3>
+          <p class="muted compact">Quan sat nhanh bien dong thu chi va can bang so du tung vi.</p>
           <div class="table-wrap">
             <table>
               <thead>
@@ -126,7 +135,7 @@
         </article>
       </section>
 
-      <section class="grid">
+      <section class="grid" id="sec-phones-budget">
         <article class="box">
           <h3>So dien thoai nguoi dung</h3>
           <form id="phoneForm" class="stack">
@@ -178,7 +187,7 @@
         </article>
       </section>
 
-      <section class="grid">
+      <section class="grid" id="sec-goals-reports">
         <article class="box">
           <h3>Muc tieu tai chinh</h3>
           <form id="goalForm" class="stack">
@@ -231,6 +240,7 @@
 
       <section id="adminSection" class="box hidden">
         <h3>Admin CRUD User</h3>
+        <p class="muted compact">Quan tri tai khoan va thao tac CRUD truc quan tren toan bo bang du lieu.</p>
         <form id="userCreateForm" class="stack inline-grid">
           <input id="newUsername" placeholder="Ten tai khoan" required>
           <input id="newEmail" placeholder="Email" required>
