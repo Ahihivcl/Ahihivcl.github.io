@@ -64,6 +64,13 @@ button {
   font: inherit;
 }
 
+textarea {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font: inherit;
+}
+
 button {
   background: var(--primary);
   color: #fff;
@@ -207,6 +214,25 @@ td {
 
 .btn-delete {
   background: #dc2626;
+}
+
+.danger-btn {
+  background: #dc2626;
+}
+
+.admin-json {
+  min-height: 150px;
+  font-family: Consolas, "Courier New", monospace;
+  resize: vertical;
+}
+
+.admin-table-toolbar,
+.admin-actions {
+  align-items: center;
+}
+
+#adminTableBody tr.is-selected {
+  background: #ecf7f5;
 }
 
 @media (max-width: 920px) {

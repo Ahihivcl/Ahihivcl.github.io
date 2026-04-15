@@ -234,6 +234,32 @@
             <tbody id="userTable"></tbody>
           </table>
         </div>
+
+        <hr class="divider">
+
+        <h3>Admin CRUD Tat Ca Bang</h3>
+        <div class="stack">
+          <div class="inline-grid admin-table-toolbar">
+            <select id="adminTableSelect"></select>
+            <button id="adminTableReloadBtn" type="button" class="outline">Tai lai bang</button>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead id="adminTableHead"></thead>
+              <tbody id="adminTableBody"></tbody>
+            </table>
+          </div>
+
+          <p class="muted">Chon 1 dong de sua/xoa. Nhap JSON cho du lieu can them/sua.</p>
+          <textarea id="adminRowJson" class="admin-json" placeholder='Vi du: {"ten_tk":"newuser","email":"new@example.com","mat_khau":"123456","vai_tro":"user"}'></textarea>
+          <div class="inline-grid admin-actions">
+            <button id="adminInsertBtn" type="button">Them dong</button>
+            <button id="adminUpdateBtn" type="button">Cap nhat dong da chon</button>
+            <button id="adminDeleteBtn" type="button" class="danger-btn">Xoa dong da chon</button>
+          </div>
+          <p id="adminTableMessage" class="message"></p>
+        </div>
       </section>
     </section>
   </main>

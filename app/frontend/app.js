@@ -4,7 +4,9 @@ const state = {
   categories: [],
   wallets: [],
   incomeCategorySet: new Set(),
-  supabase: null
+  supabase: null,
+  adminTableRows: [],
+  adminSelectedRow: null
 };
 
 const DEFAULT_SUPABASE_URL = "https://dhfnyufxzlytrkadinpn.supabase.co";
@@ -53,6 +55,49 @@ const budgetCategory = document.getElementById("budgetCategory");
 const phoneUser = document.getElementById("phoneUser");
 const budgetUser = document.getElementById("budgetUser");
 const goalUser = document.getElementById("goalUser");
+const adminTableSelect = document.getElementById("adminTableSelect");
+const adminTableReloadBtn = document.getElementById("adminTableReloadBtn");
+const adminTableHead = document.getElementById("adminTableHead");
+const adminTableBody = document.getElementById("adminTableBody");
+const adminRowJson = document.getElementById("adminRowJson");
+const adminInsertBtn = document.getElementById("adminInsertBtn");
+const adminUpdateBtn = document.getElementById("adminUpdateBtn");
+const adminDeleteBtn = document.getElementById("adminDeleteBtn");
+const adminTableMessage = document.getElementById("adminTableMessage");
+
+const ADMIN_TABLE_CONFIG = [
+  { name: "nguoidung", pk: ["nguoidung_id"] },
+  { name: "nguoidung_sdt", pk: ["nguoidung_id", "sdt"] },
+  { name: "vitien", pk: ["vi_id"] },
+  { name: "danhmuc", pk: ["danhmuc_id"] },
+  { name: "chitieu", pk: ["chitieu_id"] },
+  { name: "thunhap", pk: ["thunhap_id"] },
+  { name: "taichinhdaihan", pk: ["taichinhdaihan_id"] },
+  { name: "giaodich", pk: ["giaodich_id"] },
+  { name: "ngansach", pk: ["ngansach_id"] },
+  { name: "muctieutaichinh", pk: ["muctieu_id"] },
+  { name: "baocaotaichinh", pk: ["baocao_id"] }
+];
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function normalizeRowValue(value) {
+  if (value === "") {
+    return null;
+  }
+  return value;
+}
+
+function getAdminTableConfig(tableName) {
+  return ADMIN_TABLE_CONFIG.find(x => x.name === tableName);
+}
 
 function setMessage(target, text, isError = true) {
   if (!target) {
@@ -118,6 +163,137 @@ function renderUserRows(rows) {
       </tr>
     `)
     .join("");
+}
+
+function clearAdminSelection() {
+  state.adminSelectedRow = null;
+  if (adminRowJson) {
+    adminRowJson.value = "";
+  }
+  document.querySelectorAll("#adminTableBody tr").forEach(row => {
+    row.classList.remove("is-selected");
+  });
+}
+
+function renderAdminTableRows(rows) {
+  const data = rows || [];
+  state.adminTableRows = data;
+
+  if (!adminTableHead || !adminTableBody) {
+    return;
+  }
+
+  if (data.length === 0) {
+    adminTableHead.innerHTML = "<tr><th>Du lieu</th><th>Hanh dong</th></tr>";
+    adminTableBody.innerHTML = "<tr><td colspan=\"2\">Bang hien tai chua co du lieu.</td></tr>";
+    clearAdminSelection();
+    return;
+  }
+
+  const columnSet = new Set();
+  data.forEach(row => {
+    Object.keys(row).forEach(key => columnSet.add(key));
+  });
+  const columns = Array.from(columnSet);
+
+  adminTableHead.innerHTML = `<tr>${columns.map(c => `<th>${escapeHtml(c)}</th>`).join("")}<th>Hanh dong</th></tr>`;
+  adminTableBody.innerHTML = data
+    .map((row, idx) => {
+      const cells = columns
+        .map(col => `<td>${escapeHtml(row[col] == null ? "" : row[col])}</td>`)
+        .join("");
+      return `
+        <tr id="admin-row-${idx}">
+          ${cells}
+          <td>
+            <button class="action-btn btn-edit" onclick="pickAdminRow(${idx})">Chon</button>
+            <button class="action-btn btn-delete" onclick="deleteAdminRow(${idx})">Xoa</button>
+          </td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  clearAdminSelection();
+}
+
+async function loadAdminTableRows() {
+  if (state.user?.vai_tro !== "admin") {
+    return;
+  }
+
+  const tableName = adminTableSelect.value;
+  const { data, error } = await state.supabase
+    .from(tableName)
+    .select("*")
+    .limit(200);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  renderAdminTableRows(data || []);
+}
+
+async function insertAdminRow() {
+  const tableName = adminTableSelect.value;
+  const payload = JSON.parse(adminRowJson.value || "{}");
+  const normalized = Object.fromEntries(Object.entries(payload).map(([k, v]) => [k, normalizeRowValue(v)]));
+
+  const { error } = await state.supabase.from(tableName).insert([normalized]);
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+async function updateAdminRow() {
+  const tableName = adminTableSelect.value;
+  const config = getAdminTableConfig(tableName);
+
+  if (!config) {
+    throw new Error("Bang khong duoc cau hinh khoa chinh");
+  }
+
+  if (!state.adminSelectedRow) {
+    throw new Error("Hay chon dong can cap nhat truoc");
+  }
+
+  const payload = JSON.parse(adminRowJson.value || "{}");
+  const normalized = Object.fromEntries(Object.entries(payload).map(([k, v]) => [k, normalizeRowValue(v)]));
+
+  let req = state.supabase.from(tableName).update(normalized);
+  config.pk.forEach(pk => {
+    req = req.eq(pk, state.adminSelectedRow[pk]);
+  });
+
+  const { error } = await req;
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+async function deleteAdminRowBySource(rowSource) {
+  const tableName = adminTableSelect.value;
+  const config = getAdminTableConfig(tableName);
+
+  if (!config) {
+    throw new Error("Bang khong duoc cau hinh khoa chinh");
+  }
+
+  const row = rowSource || state.adminSelectedRow;
+  if (!row) {
+    throw new Error("Hay chon dong can xoa truoc");
+  }
+
+  let req = state.supabase.from(tableName).delete();
+  config.pk.forEach(pk => {
+    req = req.eq(pk, row[pk]);
+  });
+
+  const { error } = await req;
+  if (error) {
+    throw new Error(error.message);
+  }
 }
 
 function renderPhones(rows) {
@@ -214,6 +390,61 @@ function toggleAdminUI() {
     el.classList.toggle("hidden", !isAdmin);
   });
 }
+
+function ensureAdminTableOptions() {
+  if (!adminTableSelect) {
+    return;
+  }
+
+  if (adminTableSelect.options.length > 0) {
+    return;
+  }
+
+  adminTableSelect.innerHTML = ADMIN_TABLE_CONFIG
+    .map(item => `<option value="${item.name}">${item.name}</option>`)
+    .join("");
+}
+
+window.pickAdminRow = function pickAdminRow(index) {
+  const row = state.adminTableRows[index];
+  if (!row) {
+    return;
+  }
+
+  state.adminSelectedRow = { ...row };
+  adminRowJson.value = JSON.stringify(row, null, 2);
+
+  document.querySelectorAll("#adminTableBody tr").forEach(el => {
+    el.classList.remove("is-selected");
+  });
+
+  const selectedTr = document.getElementById(`admin-row-${index}`);
+  if (selectedTr) {
+    selectedTr.classList.add("is-selected");
+  }
+};
+
+window.deleteAdminRow = async function deleteAdminRow(index) {
+  const row = state.adminTableRows[index];
+  if (!row) {
+    return;
+  }
+
+  if (!confirm("Xoa dong da chon?")) {
+    return;
+  }
+
+  setMessage(adminTableMessage, "");
+
+  try {
+    await deleteAdminRowBySource(row);
+    setMessage(adminTableMessage, "Xoa dong thanh cong", false);
+    await loadAdminTableRows();
+    await refreshData();
+  } catch (err) {
+    setMessage(adminTableMessage, err.message, true);
+  }
+};
 
 async function loadSummaryMetrics() {
   const sb = state.supabase;
@@ -331,6 +562,10 @@ async function refreshData() {
 
   if (isAdmin) {
     renderUserRows(state.users);
+    ensureAdminTableOptions();
+    await loadAdminTableRows();
+  } else {
+    renderAdminTableRows([]);
   }
 
   toggleAdminUI();
@@ -640,10 +875,93 @@ userCreateForm.addEventListener("submit", async e => {
   }
 });
 
+adminTableSelect.addEventListener("change", async () => {
+  if (state.user?.vai_tro !== "admin") {
+    return;
+  }
+
+  setMessage(adminTableMessage, "");
+  try {
+    await loadAdminTableRows();
+  } catch (err) {
+    setMessage(adminTableMessage, err.message, true);
+  }
+});
+
+adminTableReloadBtn.addEventListener("click", async () => {
+  if (state.user?.vai_tro !== "admin") {
+    return;
+  }
+
+  setMessage(adminTableMessage, "");
+  try {
+    await loadAdminTableRows();
+    setMessage(adminTableMessage, "Tai lai du lieu bang thanh cong", false);
+  } catch (err) {
+    setMessage(adminTableMessage, err.message, true);
+  }
+});
+
+adminInsertBtn.addEventListener("click", async () => {
+  if (state.user?.vai_tro !== "admin") {
+    return;
+  }
+
+  setMessage(adminTableMessage, "");
+  try {
+    await insertAdminRow();
+    setMessage(adminTableMessage, "Them dong thanh cong", false);
+    await loadAdminTableRows();
+    await refreshData();
+  } catch (err) {
+    setMessage(adminTableMessage, err.message, true);
+  }
+});
+
+adminUpdateBtn.addEventListener("click", async () => {
+  if (state.user?.vai_tro !== "admin") {
+    return;
+  }
+
+  setMessage(adminTableMessage, "");
+  try {
+    await updateAdminRow();
+    setMessage(adminTableMessage, "Cap nhat dong thanh cong", false);
+    await loadAdminTableRows();
+    await refreshData();
+  } catch (err) {
+    setMessage(adminTableMessage, err.message, true);
+  }
+});
+
+adminDeleteBtn.addEventListener("click", async () => {
+  if (state.user?.vai_tro !== "admin") {
+    return;
+  }
+
+  if (!confirm("Xoa dong da chon?")) {
+    return;
+  }
+
+  setMessage(adminTableMessage, "");
+  try {
+    await deleteAdminRowBySource();
+    setMessage(adminTableMessage, "Xoa dong thanh cong", false);
+    await loadAdminTableRows();
+    await refreshData();
+  } catch (err) {
+    setMessage(adminTableMessage, err.message, true);
+  }
+});
+
 logoutBtn.addEventListener("click", () => {
   state.user = null;
+  state.adminTableRows = [];
+  state.adminSelectedRow = null;
   appPanel.classList.add("hidden");
   loginCard.classList.remove("hidden");
+  renderAdminTableRows([]);
+  setMessage(adminTableMessage, "");
 });
 
 window.updateUser = async function updateUser(id) {
