@@ -3,6 +3,11 @@ const state = {
   users: [],
   categories: [],
   wallets: [],
+  transactions: [],
+  phones: [],
+  budgets: [],
+  goals: [],
+  reports: [],
   incomeCategorySet: new Set(),
   supabase: null,
   adminTableRows: [],
@@ -42,6 +47,7 @@ const metrics = document.getElementById("metrics");
 const adminSection = document.getElementById("adminSection");
 
 const txTable = document.getElementById("txTable");
+const walletTable = document.getElementById("walletTable");
 const userTable = document.getElementById("userTable");
 const phoneTable = document.getElementById("phoneTable");
 const budgetTable = document.getElementById("budgetTable");
@@ -140,6 +146,10 @@ function currentUserCode() {
   return state.user?.nguoidung_id;
 }
 
+function isAdminUser() {
+  return state.user?.vai_tro === "admin";
+}
+
 function selectedOrCurrent(selectEl) {
   return state.user?.vai_tro === "admin" ? (selectEl.value || currentUserCode()) : currentUserCode();
 }
@@ -163,6 +173,32 @@ function renderTransactions(rows) {
         <td>${Number(r.so_tien).toLocaleString("vi-VN")}</td>
         <td>${String(r.ngay_giao_dich).slice(0, 10)}</td>
         <td>${r.id_nguoi_dung}</td>
+        <td>
+          ${isAdminUser() ? `
+            <button class="action-btn btn-edit" onclick="updateTransaction('${r.giaodich_id}')">Sua</button>
+            <button class="action-btn btn-delete" onclick="deleteTransaction('${r.giaodich_id}')">Xoa</button>
+          ` : ""}
+        </td>
+      </tr>
+    `)
+    .join("");
+}
+
+function renderWallets(rows) {
+  walletTable.innerHTML = (rows || [])
+    .map(r => `
+      <tr>
+        <td>${r.vi_id}</td>
+        <td>${r.ten_vi}</td>
+        <td>${r.loai_vi || ""}</td>
+        <td>${Number(r.so_du_hien_tai || 0).toLocaleString("vi-VN")}</td>
+        <td>${r.id_nguoi_dung}</td>
+        <td>
+          ${isAdminUser() ? `
+            <button class="action-btn btn-edit" onclick="updateWallet('${r.vi_id}')">Sua</button>
+            <button class="action-btn btn-delete" onclick="deleteWallet('${r.vi_id}')">Xoa</button>
+          ` : ""}
+        </td>
       </tr>
     `)
     .join("");
@@ -408,7 +444,18 @@ async function deleteAdminRowBySource(rowSource) {
 
 function renderPhones(rows) {
   phoneTable.innerHTML = (rows || [])
-    .map(r => `<tr><td>${r.nguoidung_id}</td><td>${r.sdt}</td></tr>`)
+    .map(r => `
+      <tr>
+        <td>${r.nguoidung_id}</td>
+        <td>${r.sdt}</td>
+        <td>
+          ${isAdminUser() ? `
+            <button class="action-btn btn-edit" onclick="updatePhone('${r.nguoidung_id}','${r.sdt}')">Sua</button>
+            <button class="action-btn btn-delete" onclick="deletePhone('${r.nguoidung_id}','${r.sdt}')">Xoa</button>
+          ` : ""}
+        </td>
+      </tr>
+    `)
     .join("");
 }
 
@@ -420,6 +467,12 @@ function renderBudgets(rows) {
         <td>${r.ten_ngan_sach}</td>
         <td>${Number(r.so_tien_gioi_han).toLocaleString("vi-VN")}</td>
         <td>${r.id_nguoi_dung}</td>
+        <td>
+          ${isAdminUser() ? `
+            <button class="action-btn btn-edit" onclick="updateBudget('${r.ngansach_id}')">Sua</button>
+            <button class="action-btn btn-delete" onclick="deleteBudget('${r.ngansach_id}')">Xoa</button>
+          ` : ""}
+        </td>
       </tr>
     `)
     .join("");
@@ -433,6 +486,12 @@ function renderGoals(rows) {
         <td>${r.ten_muc_tieu}</td>
         <td>${Number(r.so_tien_can_dat).toLocaleString("vi-VN")}</td>
         <td>${r.trang_thai}</td>
+        <td>
+          ${isAdminUser() ? `
+            <button class="action-btn btn-edit" onclick="updateGoal('${r.muctieu_id}')">Sua</button>
+            <button class="action-btn btn-delete" onclick="deleteGoal('${r.muctieu_id}')">Xoa</button>
+          ` : ""}
+        </td>
       </tr>
     `)
     .join("");
@@ -447,6 +506,12 @@ function renderReports(rows) {
         <td>${Number(r.tong_thu).toLocaleString("vi-VN")}</td>
         <td>${Number(r.tong_chi).toLocaleString("vi-VN")}</td>
         <td>${r.id_nguoi_dung}</td>
+        <td>
+          ${isAdminUser() ? `
+            <button class="action-btn btn-edit" onclick="updateReport('${r.baocao_id}')">Sua</button>
+            <button class="action-btn btn-delete" onclick="deleteReport('${r.baocao_id}')">Xoa</button>
+          ` : ""}
+        </td>
       </tr>
     `)
     .join("");
@@ -573,18 +638,18 @@ async function loadSummaryMetrics() {
     return;
   }
 
-  const { data: rows, error } = await sb
-    .from("giaodich")
-    .select("so_tien,id_danh_muc")
-    .eq("id_nguoi_dung", currentUserCode());
+  const [{ data: txRows, error: txError }, { data: walletRows, error: walletError }] = await Promise.all([
+    sb.from("giaodich").select("so_tien,id_danh_muc").eq("id_nguoi_dung", currentUserCode()),
+    sb.from("vitien").select("so_du_hien_tai").eq("id_nguoi_dung", currentUserCode())
+  ]);
 
-  if (error) {
-    throw new Error(error.message);
+  if (txError || walletError) {
+    throw new Error((txError || walletError).message);
   }
 
   let totalIncome = 0;
   let totalExpense = 0;
-  for (const row of rows || []) {
+  for (const row of txRows || []) {
     if (state.incomeCategorySet.has(row.id_danh_muc)) {
       totalIncome += Number(row.so_tien || 0);
     } else {
@@ -592,10 +657,12 @@ async function loadSummaryMetrics() {
     }
   }
 
+  const walletBalance = (walletRows || []).reduce((sum, row) => sum + Number(row.so_du_hien_tai || 0), 0);
+
   renderMetrics({
     totalIncome,
     totalExpense,
-    balance: totalIncome - totalExpense
+    balance: walletBalance
   });
 }
 
@@ -608,12 +675,12 @@ async function refreshData() {
     : sb.from("nguoidung").select("nguoidung_id,ten_tk,email,vai_tro,ngay_tao").eq("nguoidung_id", currentUserCode());
 
   const walletsPromise = isAdmin
-    ? sb.from("vitien").select("vi_id,ten_vi,id_nguoi_dung").order("vi_id")
-    : sb.from("vitien").select("vi_id,ten_vi,id_nguoi_dung").eq("id_nguoi_dung", currentUserCode()).order("vi_id");
+    ? sb.from("vitien").select("vi_id,ten_vi,loai_vi,so_du_hien_tai,id_nguoi_dung").order("vi_id")
+    : sb.from("vitien").select("vi_id,ten_vi,loai_vi,so_du_hien_tai,id_nguoi_dung").eq("id_nguoi_dung", currentUserCode()).order("vi_id");
 
   const txPromise = isAdmin
-    ? sb.from("giaodich").select("giaodich_id,ten_giao_dich,so_tien,ngay_giao_dich,id_nguoi_dung").order("ngay_giao_dich", { ascending: false }).limit(100)
-    : sb.from("giaodich").select("giaodich_id,ten_giao_dich,so_tien,ngay_giao_dich,id_nguoi_dung").eq("id_nguoi_dung", currentUserCode()).order("ngay_giao_dich", { ascending: false }).limit(100);
+    ? sb.from("giaodich").select("giaodich_id,ten_giao_dich,so_tien,ngay_giao_dich,ghi_chu,id_nguoi_dung").order("ngay_giao_dich", { ascending: false }).limit(100)
+    : sb.from("giaodich").select("giaodich_id,ten_giao_dich,so_tien,ngay_giao_dich,ghi_chu,id_nguoi_dung").eq("id_nguoi_dung", currentUserCode()).order("ngay_giao_dich", { ascending: false }).limit(100);
 
   const phonePromise = isAdmin
     ? sb.from("nguoidung_sdt").select("nguoidung_id,sdt").order("nguoidung_id")
@@ -662,13 +729,19 @@ async function refreshData() {
   state.incomeCategorySet = new Set((incomeRes.data || []).map(x => x.thunhap_id));
   state.users = usersRes.data || [];
   state.wallets = walletsRes.data || [];
+  state.transactions = txRes.data || [];
+  state.phones = phonesRes.data || [];
+  state.budgets = budgetRes.data || [];
+  state.goals = goalRes.data || [];
+  state.reports = reportRes.data || [];
 
   fillSelectOptions();
-  renderTransactions(txRes.data);
-  renderPhones(phonesRes.data);
-  renderBudgets(budgetRes.data);
-  renderGoals(goalRes.data);
-  renderReports(reportRes.data);
+  renderTransactions(state.transactions);
+  renderWallets(state.wallets);
+  renderPhones(state.phones);
+  renderBudgets(state.budgets);
+  renderGoals(state.goals);
+  renderReports(state.reports);
 
   if (isAdmin) {
     renderUserRows(state.users);
@@ -1079,6 +1152,378 @@ logoutBtn.addEventListener("click", () => {
   renderAdminTableRows([]);
   setMessage(adminTableMessage, "");
 });
+
+window.updateTransaction = async function updateTransaction(id) {
+  if (!isAdminUser()) {
+    return;
+  }
+
+  const row = state.transactions.find(x => x.giaodich_id === id);
+  if (!row) {
+    setMessage(adminMessage, "Khong tim thay giao dich", true);
+    return;
+  }
+
+  const ten = prompt("Ten giao dich moi:", row.ten_giao_dich || "");
+  if (ten === null) {
+    return;
+  }
+  const soTien = prompt("So tien moi:", row.so_tien ?? "");
+  if (soTien === null) {
+    return;
+  }
+  const ngay = prompt("Ngay giao dich (YYYY-MM-DD):", String(row.ngay_giao_dich || "").slice(0, 10));
+  if (ngay === null) {
+    return;
+  }
+  const ghiChu = prompt("Ghi chu:", row.ghi_chu || "") ?? "";
+
+  try {
+    const { error } = await state.supabase
+      .from("giaodich")
+      .update({
+        ten_giao_dich: ten.trim(),
+        so_tien: Number(soTien),
+        ngay_giao_dich: ngay,
+        ghi_chu: ghiChu.trim() || null
+      })
+      .eq("giaodich_id", id);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    setMessage(adminMessage, `Cap nhat giao dich ${id} thanh cong`, false);
+    await refreshData();
+  } catch (err) {
+    setMessage(adminMessage, err.message, true);
+  }
+};
+
+window.deleteTransaction = async function deleteTransaction(id) {
+  if (!isAdminUser()) {
+    return;
+  }
+
+  if (!confirm(`Xoa giao dich ${id}?`)) {
+    return;
+  }
+
+  try {
+    const { error } = await state.supabase.from("giaodich").delete().eq("giaodich_id", id);
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    setMessage(adminMessage, `Xoa giao dich ${id} thanh cong`, false);
+    await refreshData();
+  } catch (err) {
+    setMessage(adminMessage, err.message, true);
+  }
+};
+
+window.updateWallet = async function updateWallet(id) {
+  if (!isAdminUser()) {
+    return;
+  }
+
+  const row = state.wallets.find(x => x.vi_id === id);
+  if (!row) {
+    setMessage(adminMessage, "Khong tim thay vi", true);
+    return;
+  }
+
+  const tenVi = prompt("Ten vi moi:", row.ten_vi || "");
+  if (tenVi === null) {
+    return;
+  }
+  const loaiVi = prompt("Loai vi moi:", row.loai_vi || "Tien mat");
+  if (loaiVi === null) {
+    return;
+  }
+  const soDu = prompt("So du hien tai:", row.so_du_hien_tai ?? "0");
+  if (soDu === null) {
+    return;
+  }
+
+  try {
+    const { error } = await state.supabase
+      .from("vitien")
+      .update({ ten_vi: tenVi.trim(), loai_vi: loaiVi.trim(), so_du_hien_tai: Number(soDu) })
+      .eq("vi_id", id);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    setMessage(adminMessage, `Cap nhat vi ${id} thanh cong`, false);
+    await refreshData();
+  } catch (err) {
+    setMessage(adminMessage, err.message, true);
+  }
+};
+
+window.deleteWallet = async function deleteWallet(id) {
+  if (!isAdminUser()) {
+    return;
+  }
+
+  if (!confirm(`Xoa vi ${id}?`)) {
+    return;
+  }
+
+  try {
+    const { error } = await state.supabase.from("vitien").delete().eq("vi_id", id);
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    setMessage(adminMessage, `Xoa vi ${id} thanh cong`, false);
+    await refreshData();
+  } catch (err) {
+    setMessage(adminMessage, err.message, true);
+  }
+};
+
+window.updatePhone = async function updatePhone(userId, phoneNumber) {
+  if (!isAdminUser()) {
+    return;
+  }
+
+  const newPhone = prompt("Nhap SDT moi:", phoneNumber || "");
+  if (!newPhone) {
+    return;
+  }
+
+  try {
+    const { error } = await state.supabase
+      .from("nguoidung_sdt")
+      .update({ sdt: newPhone.trim() })
+      .eq("nguoidung_id", userId)
+      .eq("sdt", phoneNumber);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    setMessage(adminMessage, `Cap nhat SDT user ${userId} thanh cong`, false);
+    await refreshData();
+  } catch (err) {
+    setMessage(adminMessage, err.message, true);
+  }
+};
+
+window.deletePhone = async function deletePhone(userId, phoneNumber) {
+  if (!isAdminUser()) {
+    return;
+  }
+
+  if (!confirm(`Xoa SDT ${phoneNumber} cua user ${userId}?`)) {
+    return;
+  }
+
+  try {
+    const { error } = await state.supabase
+      .from("nguoidung_sdt")
+      .delete()
+      .eq("nguoidung_id", userId)
+      .eq("sdt", phoneNumber);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    setMessage(adminMessage, `Xoa SDT ${phoneNumber} thanh cong`, false);
+    await refreshData();
+  } catch (err) {
+    setMessage(adminMessage, err.message, true);
+  }
+};
+
+window.updateBudget = async function updateBudget(id) {
+  if (!isAdminUser()) {
+    return;
+  }
+
+  const row = state.budgets.find(x => x.ngansach_id === id);
+  if (!row) {
+    setMessage(adminMessage, "Khong tim thay ngan sach", true);
+    return;
+  }
+
+  const ten = prompt("Ten ngan sach moi:", row.ten_ngan_sach || "");
+  if (ten === null) {
+    return;
+  }
+  const limit = prompt("So tien gioi han moi:", row.so_tien_gioi_han ?? "");
+  if (limit === null) {
+    return;
+  }
+
+  try {
+    const { error } = await state.supabase
+      .from("ngansach")
+      .update({ ten_ngan_sach: ten.trim(), so_tien_gioi_han: Number(limit) })
+      .eq("ngansach_id", id);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    setMessage(adminMessage, `Cap nhat ngan sach ${id} thanh cong`, false);
+    await refreshData();
+  } catch (err) {
+    setMessage(adminMessage, err.message, true);
+  }
+};
+
+window.deleteBudget = async function deleteBudget(id) {
+  if (!isAdminUser()) {
+    return;
+  }
+
+  if (!confirm(`Xoa ngan sach ${id}?`)) {
+    return;
+  }
+
+  try {
+    const { error } = await state.supabase.from("ngansach").delete().eq("ngansach_id", id);
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    setMessage(adminMessage, `Xoa ngan sach ${id} thanh cong`, false);
+    await refreshData();
+  } catch (err) {
+    setMessage(adminMessage, err.message, true);
+  }
+};
+
+window.updateGoal = async function updateGoal(id) {
+  if (!isAdminUser()) {
+    return;
+  }
+
+  const row = state.goals.find(x => x.muctieu_id === id);
+  if (!row) {
+    setMessage(adminMessage, "Khong tim thay muc tieu", true);
+    return;
+  }
+
+  const ten = prompt("Ten muc tieu moi:", row.ten_muc_tieu || "");
+  if (ten === null) {
+    return;
+  }
+  const amount = prompt("So tien can dat moi:", row.so_tien_can_dat ?? "");
+  if (amount === null) {
+    return;
+  }
+  const status = prompt("Trang thai (Chua hoan thanh / Da hoan thanh):", row.trang_thai || "Chua hoan thanh");
+  if (status === null) {
+    return;
+  }
+
+  try {
+    const { error } = await state.supabase
+      .from("muctieutaichinh")
+      .update({ ten_muc_tieu: ten.trim(), so_tien_can_dat: Number(amount), trang_thai: status.trim() })
+      .eq("muctieu_id", id);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    setMessage(adminMessage, `Cap nhat muc tieu ${id} thanh cong`, false);
+    await refreshData();
+  } catch (err) {
+    setMessage(adminMessage, err.message, true);
+  }
+};
+
+window.deleteGoal = async function deleteGoal(id) {
+  if (!isAdminUser()) {
+    return;
+  }
+
+  if (!confirm(`Xoa muc tieu ${id}?`)) {
+    return;
+  }
+
+  try {
+    const { error } = await state.supabase.from("muctieutaichinh").delete().eq("muctieu_id", id);
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    setMessage(adminMessage, `Xoa muc tieu ${id} thanh cong`, false);
+    await refreshData();
+  } catch (err) {
+    setMessage(adminMessage, err.message, true);
+  }
+};
+
+window.updateReport = async function updateReport(id) {
+  if (!isAdminUser()) {
+    return;
+  }
+
+  const row = state.reports.find(x => x.baocao_id === id);
+  if (!row) {
+    setMessage(adminMessage, "Khong tim thay bao cao", true);
+    return;
+  }
+
+  const ten = prompt("Ten bao cao moi:", row.ten_bao_cao || "");
+  if (ten === null) {
+    return;
+  }
+  const tongThu = prompt("Tong thu moi:", row.tong_thu ?? "");
+  if (tongThu === null) {
+    return;
+  }
+  const tongChi = prompt("Tong chi moi:", row.tong_chi ?? "");
+  if (tongChi === null) {
+    return;
+  }
+
+  try {
+    const { error } = await state.supabase
+      .from("baocaotaichinh")
+      .update({ ten_bao_cao: ten.trim(), tong_thu: Number(tongThu), tong_chi: Number(tongChi) })
+      .eq("baocao_id", id);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    setMessage(adminMessage, `Cap nhat bao cao ${id} thanh cong`, false);
+    await refreshData();
+  } catch (err) {
+    setMessage(adminMessage, err.message, true);
+  }
+};
+
+window.deleteReport = async function deleteReport(id) {
+  if (!isAdminUser()) {
+    return;
+  }
+
+  if (!confirm(`Xoa bao cao ${id}?`)) {
+    return;
+  }
+
+  try {
+    const { error } = await state.supabase.from("baocaotaichinh").delete().eq("baocao_id", id);
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    setMessage(adminMessage, `Xoa bao cao ${id} thanh cong`, false);
+    await refreshData();
+  } catch (err) {
+    setMessage(adminMessage, err.message, true);
+  }
+};
 
 window.updateUser = async function updateUser(id) {
   setMessage(adminMessage, "");
