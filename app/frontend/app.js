@@ -1079,6 +1079,38 @@ budgetForm.addEventListener("submit", async e => {
   };
 
   try {
+    const { data: existing, error: existingErr } = await state.supabase
+      .from("ngansach")
+      .select("ngansach_id")
+      .eq("id_nguoi_dung", payload.id_nguoi_dung)
+      .eq("id_danh_muc", payload.id_danh_muc)
+      .maybeSingle();
+
+    if (existingErr) {
+      throw new Error(existingErr.message);
+    }
+
+    if (existing?.ngansach_id) {
+      const { error: updateErr } = await state.supabase
+        .from("ngansach")
+        .update({
+          ten_ngan_sach: payload.ten_ngan_sach,
+          so_tien_gioi_han: payload.so_tien_gioi_han,
+          ngay_bat_dau: payload.ngay_bat_dau,
+          ngay_ket_thuc: payload.ngay_ket_thuc
+        })
+        .eq("ngansach_id", existing.ngansach_id);
+
+      if (updateErr) {
+        throw new Error(updateErr.message);
+      }
+
+      setMessage(budgetMessage, "Danh muc da co ngan sach. Da cap nhat ngan sach hien co.", false);
+      budgetForm.reset();
+      await refreshData();
+      return;
+    }
+
     const { error } = await state.supabase.from("ngansach").insert([payload]);
     if (error) {
       throw new Error(error.message);
