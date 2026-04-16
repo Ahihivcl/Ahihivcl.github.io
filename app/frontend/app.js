@@ -40,6 +40,7 @@ const goalForm = document.getElementById("goalForm");
 const reportForm = document.getElementById("reportForm");
 const walletForm = document.getElementById("walletForm");
 const logoutBtn = document.getElementById("logoutBtn");
+const reportMonth = document.getElementById("reportMonth");
 
 const welcome = document.getElementById("welcome");
 const roleBadge = document.getElementById("roleBadge");
@@ -53,6 +54,9 @@ const phoneTable = document.getElementById("phoneTable");
 const budgetTable = document.getElementById("budgetTable");
 const goalTable = document.getElementById("goalTable");
 const reportTable = document.getElementById("reportTable");
+const reportTxTable = document.getElementById("reportTxTable");
+const reportDetailPanel = document.getElementById("reportDetailPanel");
+const reportDetailTitle = document.getElementById("reportDetailTitle");
 const txSubmitBtn = document.getElementById("txSubmitBtn");
 
 const txCategory = document.getElementById("txCategory");
@@ -142,6 +146,15 @@ function makeClient() {
   state.supabase = window.supabase.createClient(DEFAULT_SUPABASE_URL, DEFAULT_SUPABASE_KEY);
 }
 
+function ensureReportMonthDefault() {
+  if (!reportMonth || reportMonth.value) {
+    return;
+  }
+
+  const now = new Date();
+  reportMonth.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
 function currentUserCode() {
   return state.user?.nguoidung_id;
 }
@@ -152,6 +165,63 @@ function isAdminUser() {
 
 function selectedOrCurrent(selectEl) {
   return state.user?.vai_tro === "admin" ? (selectEl.value || currentUserCode()) : currentUserCode();
+}
+
+function toMonthRange(monthValue) {
+  const [yearStr, monthStr] = String(monthValue || "").split("-");
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  if (!year || !month) {
+    return null;
+  }
+
+  const from = `${yearStr}-${String(month).padStart(2, "0")}-01`;
+  const lastDate = new Date(year, month, 0).getDate();
+  const to = `${yearStr}-${String(month).padStart(2, "0")}-${String(lastDate).padStart(2, "0")}`;
+  return { from, to, year, month };
+}
+
+function getUserWalletBalanceMap() {
+  const map = {};
+  (state.wallets || []).forEach(w => {
+    map[w.id_nguoi_dung] = (map[w.id_nguoi_dung] || 0) + Number(w.so_du_hien_tai || 0);
+  });
+  return map;
+}
+
+function calculateBudgetSpent(budgetRow) {
+  const start = budgetRow.ngay_bat_dau || new Date().toISOString().slice(0, 10);
+  const end = budgetRow.ngay_ket_thuc || "9999-12-31";
+
+  const spent = (state.transactions || []).reduce((sum, tx) => {
+    const day = String(tx.ngay_giao_dich || "").slice(0, 10);
+    const sameUser = tx.id_nguoi_dung === budgetRow.id_nguoi_dung;
+    const sameCategory = tx.id_danh_muc === budgetRow.id_danh_muc;
+    const inRange = day >= start && day <= end;
+    const isExpense = !state.incomeCategorySet.has(tx.id_danh_muc);
+    if (sameUser && sameCategory && inRange && isExpense) {
+      return sum + Number(tx.so_tien || 0);
+    }
+    return sum;
+  }, 0);
+
+  return spent;
+}
+
+async function syncGoalStatuses() {
+  const changed = (state.goals || []).filter(g => g.trang_thai !== g._status);
+  if (changed.length === 0) {
+    return;
+  }
+
+  await Promise.all(
+    changed.map(g =>
+      state.supabase
+        .from("muctieutaichinh")
+        .update({ trang_thai: g._status })
+        .eq("muctieu_id", g.muctieu_id)
+    )
+  );
 }
 
 function renderMetrics(metricsData) {
@@ -466,12 +536,18 @@ function renderBudgets(rows) {
         <td>${r.ngansach_id}</td>
         <td>${r.ten_ngan_sach}</td>
         <td>${Number(r.so_tien_gioi_han).toLocaleString("vi-VN")}</td>
+        <td>${Number(r._spent || 0).toLocaleString("vi-VN")}</td>
+        <td class="${Number(r._remain || 0) < 0 ? "cell-negative" : "cell-positive"}">${Number(r._remain || 0).toLocaleString("vi-VN")}</td>
+        <td>
+          <div class="progress-wrap">
+            <div class="progress-bar ${Number(r._progress || 0) > 100 ? "over" : ""}" style="width:${Math.min(Number(r._progress || 0), 100)}%"></div>
+          </div>
+          <span class="progress-label">${Number(r._progress || 0).toFixed(0)}%</span>
+        </td>
         <td>${r.id_nguoi_dung}</td>
         <td>
-          ${isAdminUser() ? `
-            <button class="action-btn btn-edit" onclick="updateBudget('${r.ngansach_id}')">Sua</button>
-            <button class="action-btn btn-delete" onclick="deleteBudget('${r.ngansach_id}')">Xoa</button>
-          ` : ""}
+          <button class="action-btn btn-edit" onclick="updateBudget('${r.ngansach_id}')">Sua</button>
+          <button class="action-btn btn-delete" onclick="deleteBudget('${r.ngansach_id}')">Xoa</button>
         </td>
       </tr>
     `)
@@ -485,12 +561,11 @@ function renderGoals(rows) {
         <td>${r.muctieu_id}</td>
         <td>${r.ten_muc_tieu}</td>
         <td>${Number(r.so_tien_can_dat).toLocaleString("vi-VN")}</td>
-        <td>${r.trang_thai}</td>
+        <td>${Number(r._currentSaving || 0).toLocaleString("vi-VN")} / ${Number(r.so_tien_can_dat || 0).toLocaleString("vi-VN")} (${Number(r._progress || 0).toFixed(0)}%)</td>
+        <td><span class="goal-status ${r._status === "Da hoan thanh" ? "done" : "todo"}">${r._status}</span></td>
         <td>
-          ${isAdminUser() ? `
-            <button class="action-btn btn-edit" onclick="updateGoal('${r.muctieu_id}')">Sua</button>
-            <button class="action-btn btn-delete" onclick="deleteGoal('${r.muctieu_id}')">Xoa</button>
-          ` : ""}
+          <button class="action-btn btn-edit" onclick="updateGoal('${r.muctieu_id}')">Sua</button>
+          <button class="action-btn btn-delete" onclick="deleteGoal('${r.muctieu_id}')">Xoa</button>
         </td>
       </tr>
     `)
@@ -505,8 +580,10 @@ function renderReports(rows) {
         <td>${r.ten_bao_cao}</td>
         <td>${Number(r.tong_thu).toLocaleString("vi-VN")}</td>
         <td>${Number(r.tong_chi).toLocaleString("vi-VN")}</td>
+        <td>${String(r.thoi_gian || "").slice(0, 7)}</td>
         <td>${r.id_nguoi_dung}</td>
         <td>
+          <button class="action-btn btn-edit" onclick="viewReportTransactions('${r.baocao_id}')">Xem</button>
           ${isAdminUser() ? `
             <button class="action-btn btn-edit" onclick="updateReport('${r.baocao_id}')">Sua</button>
             <button class="action-btn btn-delete" onclick="deleteReport('${r.baocao_id}')">Xoa</button>
@@ -514,6 +591,33 @@ function renderReports(rows) {
         </td>
       </tr>
     `)
+    .join("");
+}
+
+function renderReportTransactions(rows, reportRow) {
+  const data = rows || [];
+  reportDetailPanel.classList.remove("hidden");
+  reportDetailTitle.textContent = `Chi tiet giao dich - ${reportRow.ten_bao_cao}`;
+
+  if (data.length === 0) {
+    reportTxTable.innerHTML = "<tr><td colspan=\"4\">Khong co giao dich trong thang nay.</td></tr>";
+    return;
+  }
+
+  reportTxTable.innerHTML = data
+    .map(tx => {
+      const isIncome = state.incomeCategorySet.has(tx.id_danh_muc);
+      const cls = isIncome ? "tx-income" : "tx-expense";
+      const sign = isIncome ? "+" : "-";
+      return `
+        <tr>
+          <td>${String(tx.ngay_giao_dich || "").slice(0, 10)}</td>
+          <td>${escapeHtml(tx.ten_giao_dich || "")}</td>
+          <td>${isIncome ? "Thu" : "Chi"}</td>
+          <td class="${cls}">${sign}${Number(tx.so_tien || 0).toLocaleString("vi-VN")}</td>
+        </tr>
+      `;
+    })
     .join("");
 }
 
@@ -669,6 +773,7 @@ async function loadSummaryMetrics() {
 async function refreshData() {
   const sb = state.supabase;
   const isAdmin = state.user.vai_tro === "admin";
+  ensureReportMonthDefault();
 
   const usersPromise = isAdmin
     ? sb.from("nguoidung").select("nguoidung_id,ten_tk,email,vai_tro,ngay_tao").order("nguoidung_id")
@@ -679,24 +784,24 @@ async function refreshData() {
     : sb.from("vitien").select("vi_id,ten_vi,loai_vi,so_du_hien_tai,id_nguoi_dung").eq("id_nguoi_dung", currentUserCode()).order("vi_id");
 
   const txPromise = isAdmin
-    ? sb.from("giaodich").select("giaodich_id,ten_giao_dich,so_tien,ngay_giao_dich,ghi_chu,id_nguoi_dung").order("ngay_giao_dich", { ascending: false }).limit(100)
-    : sb.from("giaodich").select("giaodich_id,ten_giao_dich,so_tien,ngay_giao_dich,ghi_chu,id_nguoi_dung").eq("id_nguoi_dung", currentUserCode()).order("ngay_giao_dich", { ascending: false }).limit(100);
+    ? sb.from("giaodich").select("giaodich_id,ten_giao_dich,so_tien,ngay_giao_dich,ghi_chu,id_nguoi_dung,id_danh_muc").order("ngay_giao_dich", { ascending: false }).limit(300)
+    : sb.from("giaodich").select("giaodich_id,ten_giao_dich,so_tien,ngay_giao_dich,ghi_chu,id_nguoi_dung,id_danh_muc").eq("id_nguoi_dung", currentUserCode()).order("ngay_giao_dich", { ascending: false }).limit(300);
 
   const phonePromise = isAdmin
     ? sb.from("nguoidung_sdt").select("nguoidung_id,sdt").order("nguoidung_id")
     : sb.from("nguoidung_sdt").select("nguoidung_id,sdt").eq("nguoidung_id", currentUserCode());
 
   const budgetPromise = isAdmin
-    ? sb.from("ngansach").select("ngansach_id,ten_ngan_sach,so_tien_gioi_han,id_nguoi_dung").order("ngansach_id")
-    : sb.from("ngansach").select("ngansach_id,ten_ngan_sach,so_tien_gioi_han,id_nguoi_dung").eq("id_nguoi_dung", currentUserCode()).order("ngansach_id");
+    ? sb.from("ngansach").select("ngansach_id,ten_ngan_sach,so_tien_gioi_han,id_nguoi_dung,id_danh_muc,ngay_bat_dau,ngay_ket_thuc").order("ngansach_id")
+    : sb.from("ngansach").select("ngansach_id,ten_ngan_sach,so_tien_gioi_han,id_nguoi_dung,id_danh_muc,ngay_bat_dau,ngay_ket_thuc").eq("id_nguoi_dung", currentUserCode()).order("ngansach_id");
 
   const goalPromise = isAdmin
     ? sb.from("muctieutaichinh").select("muctieu_id,ten_muc_tieu,so_tien_can_dat,trang_thai,id_nguoi_dung").order("muctieu_id")
     : sb.from("muctieutaichinh").select("muctieu_id,ten_muc_tieu,so_tien_can_dat,trang_thai,id_nguoi_dung").eq("id_nguoi_dung", currentUserCode()).order("muctieu_id");
 
   const reportPromise = isAdmin
-    ? sb.from("baocaotaichinh").select("baocao_id,ten_bao_cao,tong_thu,tong_chi,id_nguoi_dung").order("baocao_id", { ascending: false }).limit(100)
-    : sb.from("baocaotaichinh").select("baocao_id,ten_bao_cao,tong_thu,tong_chi,id_nguoi_dung").eq("id_nguoi_dung", currentUserCode()).order("baocao_id", { ascending: false }).limit(100);
+    ? sb.from("baocaotaichinh").select("baocao_id,ten_bao_cao,tong_thu,tong_chi,thoi_gian,id_nguoi_dung").order("thoi_gian", { ascending: false }).limit(100)
+    : sb.from("baocaotaichinh").select("baocao_id,ten_bao_cao,tong_thu,tong_chi,thoi_gian,id_nguoi_dung").eq("id_nguoi_dung", currentUserCode()).order("thoi_gian", { ascending: false }).limit(100);
 
   const [
     categoriesRes,
@@ -731,9 +836,39 @@ async function refreshData() {
   state.wallets = walletsRes.data || [];
   state.transactions = txRes.data || [];
   state.phones = phonesRes.data || [];
-  state.budgets = budgetRes.data || [];
-  state.goals = goalRes.data || [];
+  state.budgets = (budgetRes.data || []).map(row => {
+    const spent = calculateBudgetSpent(row);
+    const limit = Number(row.so_tien_gioi_han || 0);
+    const remain = limit - spent;
+    const progress = limit > 0 ? (spent / limit) * 100 : 0;
+    return {
+      ...row,
+      _spent: spent,
+      _remain: remain,
+      _progress: progress
+    };
+  });
+
+  const walletBalanceByUser = getUserWalletBalanceMap();
+  state.goals = (goalRes.data || []).map(row => {
+    const currentSaving = Number(walletBalanceByUser[row.id_nguoi_dung] || 0);
+    const target = Number(row.so_tien_can_dat || 0);
+    const status = currentSaving >= target ? "Da hoan thanh" : "Chua hoan thanh";
+    return {
+      ...row,
+      _currentSaving: currentSaving,
+      _status: status,
+      _progress: target > 0 ? (currentSaving / target) * 100 : 0
+    };
+  });
+
   state.reports = reportRes.data || [];
+
+  try {
+    await syncGoalStatuses();
+  } catch (_err) {
+    // Skip blocking UI refresh if background status sync fails.
+  }
 
   fillSelectOptions();
   renderTransactions(state.transactions);
@@ -742,6 +877,8 @@ async function refreshData() {
   renderBudgets(state.budgets);
   renderGoals(state.goals);
   renderReports(state.reports);
+  reportDetailPanel.classList.add("hidden");
+  reportTxTable.innerHTML = "";
 
   if (isAdmin) {
     renderUserRows(state.users);
@@ -986,10 +1123,18 @@ reportForm.addEventListener("submit", async e => {
 
   try {
     const targetUser = currentUserCode();
+    const monthValue = reportMonth.value;
+    const range = toMonthRange(monthValue);
+    if (!range) {
+      throw new Error("Vui long chon thang bao cao");
+    }
+
     const { data: rows, error } = await state.supabase
       .from("giaodich")
       .select("so_tien,id_danh_muc")
-      .eq("id_nguoi_dung", targetUser);
+      .eq("id_nguoi_dung", targetUser)
+      .gte("ngay_giao_dich", range.from)
+      .lte("ngay_giao_dich", range.to);
 
     if (error) {
       throw new Error(error.message);
@@ -1005,20 +1150,47 @@ reportForm.addEventListener("submit", async e => {
       }
     }
 
-    const now = new Date();
-    const tenBaoCao = `Bao cao thang ${now.getMonth() + 1}-${now.getFullYear()}`;
-    const { error: insErr } = await state.supabase.from("baocaotaichinh").insert([
-      {
-        ten_bao_cao: tenBaoCao,
-        tong_thu: tongThu,
-        tong_chi: tongChi,
-        thoi_gian: now.toISOString().slice(0, 10),
-        id_nguoi_dung: targetUser
-      }
-    ]);
+    const tenBaoCao = `Bao cao thang ${range.month}-${range.year}`;
+    const { data: existingRows, error: existingErr } = await state.supabase
+      .from("baocaotaichinh")
+      .select("baocao_id")
+      .eq("id_nguoi_dung", targetUser)
+      .gte("thoi_gian", range.from)
+      .lte("thoi_gian", range.to)
+      .limit(1);
 
-    if (insErr) {
-      throw new Error(insErr.message);
+    if (existingErr) {
+      throw new Error(existingErr.message);
+    }
+
+    if (existingRows && existingRows.length > 0) {
+      const { error: updErr } = await state.supabase
+        .from("baocaotaichinh")
+        .update({
+          ten_bao_cao: tenBaoCao,
+          tong_thu: tongThu,
+          tong_chi: tongChi,
+          thoi_gian: range.from
+        })
+        .eq("baocao_id", existingRows[0].baocao_id);
+
+      if (updErr) {
+        throw new Error(updErr.message);
+      }
+    } else {
+      const { error: insErr } = await state.supabase.from("baocaotaichinh").insert([
+        {
+          ten_bao_cao: tenBaoCao,
+          tong_thu: tongThu,
+          tong_chi: tongChi,
+          thoi_gian: range.from,
+          id_nguoi_dung: targetUser
+        }
+      ]);
+
+      if (insErr) {
+        throw new Error(insErr.message);
+      }
     }
 
     setMessage(reportMessage, "Tao bao cao thanh cong", false);
@@ -1027,6 +1199,40 @@ reportForm.addEventListener("submit", async e => {
     setMessage(reportMessage, err.message, true);
   }
 });
+
+window.viewReportTransactions = async function viewReportTransactions(reportId) {
+  const reportRow = state.reports.find(x => x.baocao_id === reportId);
+  if (!reportRow) {
+    setMessage(reportMessage, "Khong tim thay bao cao", true);
+    return;
+  }
+
+  const month = String(reportRow.thoi_gian || "").slice(0, 7);
+  const range = toMonthRange(month);
+  if (!range) {
+    setMessage(reportMessage, "Khong xac dinh duoc thang bao cao", true);
+    return;
+  }
+
+  try {
+    const { data, error } = await state.supabase
+      .from("giaodich")
+      .select("giaodich_id,ten_giao_dich,so_tien,ngay_giao_dich,id_danh_muc")
+      .eq("id_nguoi_dung", reportRow.id_nguoi_dung)
+      .gte("ngay_giao_dich", range.from)
+      .lte("ngay_giao_dich", range.to)
+      .order("ngay_giao_dich", { ascending: false });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    renderReportTransactions(data || [], reportRow);
+    setMessage(reportMessage, `Da mo chi tiet bao cao ${reportRow.ten_bao_cao}`, false);
+  } catch (err) {
+    setMessage(reportMessage, err.message, true);
+  }
+};
 
 userCreateForm.addEventListener("submit", async e => {
   e.preventDefault();
@@ -1151,6 +1357,8 @@ logoutBtn.addEventListener("click", () => {
   loginCard.classList.remove("hidden");
   renderAdminTableRows([]);
   setMessage(adminTableMessage, "");
+  reportDetailPanel.classList.add("hidden");
+  reportTxTable.innerHTML = "";
 });
 
 window.updateTransaction = async function updateTransaction(id) {
@@ -1341,13 +1549,9 @@ window.deletePhone = async function deletePhone(userId, phoneNumber) {
 };
 
 window.updateBudget = async function updateBudget(id) {
-  if (!isAdminUser()) {
-    return;
-  }
-
   const row = state.budgets.find(x => x.ngansach_id === id);
   if (!row) {
-    setMessage(adminMessage, "Khong tim thay ngan sach", true);
+    setMessage(budgetMessage, "Khong tim thay ngan sach", true);
     return;
   }
 
@@ -1361,52 +1565,54 @@ window.updateBudget = async function updateBudget(id) {
   }
 
   try {
-    const { error } = await state.supabase
+    let req = state.supabase
       .from("ngansach")
       .update({ ten_ngan_sach: ten.trim(), so_tien_gioi_han: Number(limit) })
       .eq("ngansach_id", id);
+
+    if (!isAdminUser()) {
+      req = req.eq("id_nguoi_dung", currentUserCode());
+    }
+
+    const { error } = await req;
 
     if (error) {
       throw new Error(error.message);
     }
 
-    setMessage(adminMessage, `Cap nhat ngan sach ${id} thanh cong`, false);
+    setMessage(budgetMessage, `Cap nhat ngan sach ${id} thanh cong`, false);
     await refreshData();
   } catch (err) {
-    setMessage(adminMessage, err.message, true);
+    setMessage(budgetMessage, err.message, true);
   }
 };
 
 window.deleteBudget = async function deleteBudget(id) {
-  if (!isAdminUser()) {
-    return;
-  }
-
   if (!confirm(`Xoa ngan sach ${id}?`)) {
     return;
   }
 
   try {
-    const { error } = await state.supabase.from("ngansach").delete().eq("ngansach_id", id);
+    let req = state.supabase.from("ngansach").delete().eq("ngansach_id", id);
+    if (!isAdminUser()) {
+      req = req.eq("id_nguoi_dung", currentUserCode());
+    }
+    const { error } = await req;
     if (error) {
       throw new Error(error.message);
     }
 
-    setMessage(adminMessage, `Xoa ngan sach ${id} thanh cong`, false);
+    setMessage(budgetMessage, `Xoa ngan sach ${id} thanh cong`, false);
     await refreshData();
   } catch (err) {
-    setMessage(adminMessage, err.message, true);
+    setMessage(budgetMessage, err.message, true);
   }
 };
 
 window.updateGoal = async function updateGoal(id) {
-  if (!isAdminUser()) {
-    return;
-  }
-
   const row = state.goals.find(x => x.muctieu_id === id);
   if (!row) {
-    setMessage(adminMessage, "Khong tim thay muc tieu", true);
+    setMessage(goalMessage, "Khong tim thay muc tieu", true);
     return;
   }
 
@@ -1418,47 +1624,49 @@ window.updateGoal = async function updateGoal(id) {
   if (amount === null) {
     return;
   }
-  const status = prompt("Trang thai (Chua hoan thanh / Da hoan thanh):", row.trang_thai || "Chua hoan thanh");
-  if (status === null) {
-    return;
-  }
 
   try {
-    const { error } = await state.supabase
+    let req = state.supabase
       .from("muctieutaichinh")
-      .update({ ten_muc_tieu: ten.trim(), so_tien_can_dat: Number(amount), trang_thai: status.trim() })
+      .update({ ten_muc_tieu: ten.trim(), so_tien_can_dat: Number(amount) })
       .eq("muctieu_id", id);
+
+    if (!isAdminUser()) {
+      req = req.eq("id_nguoi_dung", currentUserCode());
+    }
+
+    const { error } = await req;
 
     if (error) {
       throw new Error(error.message);
     }
 
-    setMessage(adminMessage, `Cap nhat muc tieu ${id} thanh cong`, false);
+    setMessage(goalMessage, `Cap nhat muc tieu ${id} thanh cong`, false);
     await refreshData();
   } catch (err) {
-    setMessage(adminMessage, err.message, true);
+    setMessage(goalMessage, err.message, true);
   }
 };
 
 window.deleteGoal = async function deleteGoal(id) {
-  if (!isAdminUser()) {
-    return;
-  }
-
   if (!confirm(`Xoa muc tieu ${id}?`)) {
     return;
   }
 
   try {
-    const { error } = await state.supabase.from("muctieutaichinh").delete().eq("muctieu_id", id);
+    let req = state.supabase.from("muctieutaichinh").delete().eq("muctieu_id", id);
+    if (!isAdminUser()) {
+      req = req.eq("id_nguoi_dung", currentUserCode());
+    }
+    const { error } = await req;
     if (error) {
       throw new Error(error.message);
     }
 
-    setMessage(adminMessage, `Xoa muc tieu ${id} thanh cong`, false);
+    setMessage(goalMessage, `Xoa muc tieu ${id} thanh cong`, false);
     await refreshData();
   } catch (err) {
-    setMessage(adminMessage, err.message, true);
+    setMessage(goalMessage, err.message, true);
   }
 };
 

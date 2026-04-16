@@ -177,6 +177,9 @@
                   <th>ID</th>
                   <th>Ten</th>
                   <th>Gioi han</th>
+                  <th>Da chi</th>
+                  <th>Con lai</th>
+                  <th>Tien do</th>
                   <th>User</th>
                   <th>Hanh dong</th>
                 </tr>
@@ -205,6 +208,7 @@
                   <th>ID</th>
                   <th>Ten muc tieu</th>
                   <th>So tien</th>
+                  <th>Tien trinh</th>
                   <th>Trang thai</th>
                   <th>Hanh dong</th>
                 </tr>
@@ -217,6 +221,7 @@
         <article class="box">
           <h3>Bao cao tai chinh</h3>
           <form id="reportForm" class="stack">
+            <input id="reportMonth" type="month" required>
             <button type="submit">Tao bao cao moi</button>
           </form>
           <p id="reportMessage" class="message"></p>
@@ -228,12 +233,30 @@
                   <th>Ten bao cao</th>
                   <th>Tong thu</th>
                   <th>Tong chi</th>
+                  <th>Thang</th>
                   <th>User</th>
                   <th>Hanh dong</th>
                 </tr>
               </thead>
               <tbody id="reportTable"></tbody>
             </table>
+          </div>
+
+          <div id="reportDetailPanel" class="report-detail hidden mt8">
+            <h4 id="reportDetailTitle">Chi tiet giao dich theo thang</h4>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Ngay</th>
+                    <th>Ten giao dich</th>
+                    <th>Phan loai</th>
+                    <th>So tien</th>
+                  </tr>
+                </thead>
+                <tbody id="reportTxTable"></tbody>
+              </table>
+            </div>
           </div>
         </article>
       </section>

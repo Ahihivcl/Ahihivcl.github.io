@@ -51,7 +51,8 @@ body {
 
 h1,
 h2,
-h3 {
+h3,
+h4 {
   font-family: "Space Grotesk", sans-serif;
   letter-spacing: 0.1px;
   margin: 0;
@@ -69,6 +70,11 @@ h2 {
 
 h3 {
   font-size: 1.05rem;
+  margin-bottom: 8px;
+}
+
+h4 {
+  font-size: 0.98rem;
   margin-bottom: 8px;
 }
 
@@ -327,6 +333,74 @@ tbody tr:hover {
   min-height: 21px;
   color: var(--danger);
   font-size: 0.88rem;
+}
+
+.cell-positive {
+  color: #067647;
+  font-weight: 700;
+}
+
+.cell-negative {
+  color: #b42318;
+  font-weight: 700;
+}
+
+.progress-wrap {
+  width: 100%;
+  max-width: 120px;
+  height: 9px;
+  border-radius: 999px;
+  background: #e5e7eb;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #12b76a, #039855);
+}
+
+.progress-bar.over {
+  background: linear-gradient(90deg, #f04438, #b42318);
+}
+
+.progress-label {
+  font-size: 0.78rem;
+  color: #475467;
+}
+
+.goal-status {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.goal-status.done {
+  background: #dcfae6;
+  color: #067647;
+}
+
+.goal-status.todo {
+  background: #fee4e2;
+  color: #b42318;
+}
+
+.report-detail {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px;
+  background: #f8fafc;
+}
+
+.tx-income {
+  color: #067647;
+  font-weight: 700;
+}
+
+.tx-expense {
+  color: #b42318;
+  font-weight: 700;
 }
 
 .muted {
